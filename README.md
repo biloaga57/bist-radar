@@ -1,24 +1,13 @@
-# BIST Radar — ücretsiz web sitesi başlangıç sürümü
+# BIST Radar — Tüm BIST
+Bu sürüm tüm BIST evrenini otomatik keşfedip günlük teknik tarama yapacak şekilde hazırlanmıştır.
 
-Bu klasör statik bir web sitesidir. `index.html` dosyasını tarayıcıda açarak çalıştırabilirsiniz.
+## GitHub kurulumu
+1. Tüm dosyaları `bist-radar` deposunun köküne yükle.
+2. Settings > Pages > Deploy from a branch > `main` > `/ (root)` seç.
+3. Actions sekmesinden `BIST Radar Günlük Güncelle` iş akışını bir kez manuel çalıştır.
+4. İşlem bitince `data.json` oluşur ve site otomatik kullanır.
 
-## İçerik
-- Günlük tarama tablosu
-- Arama ve sinyal filtresi
-- Skor sıralaması
-- RSI, 21 günlük momentum, hacim oranı
-- Mobil uyumlu tasarım
-
-## Gerçek veriye bağlama
-Bu sürümdeki DATA dizisi demo veridir. Gerçek BIST verisi için `app.js` içindeki DATA yapısı bir API'den gelen JSON ile değiştirilmelidir.
-
-Önerilen mimari:
-Frontend (bu site) -> ücretsiz/izinli veri API'si -> günlük cron/job -> JSON/SQLite -> site.
-
-Gerçek zamanlı BIST verisi için veri lisansı ve sağlayıcının kullanım koşulları kontrol edilmelidir.
-
-## Ücretsiz yayınlama
-Statik sürüm GitHub Pages, Cloudflare Pages veya Netlify gibi ücretsiz statik hosting servislerine yüklenebilir. Otomatik veri toplama için ayrıca GitHub Actions gibi zamanlanmış bir görev kullanılabilir; API kullanım koşullarına uyulmalıdır.
-
-## Uyarı
-Site yatırım tavsiyesi değildir. Skorlar sadece tarama amacıyla kullanılmalıdır.
+## Önemli
+Bu paket ücretsiz yfinance günlük verisi kullanır. Gerçek zamanlı BIST verisi değildir. Veri sağlayıcıda bulunmayan semboller atlanabilir.
+Temel analiz ve KAP puanı için gerçek, izinli bir veri kaynağı ayrıca bağlanmalıdır; bu sürümde bu iki alan nötr 50 ile başlar.
+Yatırım tavsiyesi değildir.
