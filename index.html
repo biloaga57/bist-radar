@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BIST Radar — Günlük Hisse Tarama</title>
+<meta name="description" content="BIST hisselerini teknik ve temel göstergelerle tarayan ücretsiz yatırım takip paneli.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">BR</span><div><b>BIST Radar</b><small>Günlük hisse tarama</small></div></div>
+  <div class="updated" id="updated">Veri: örnek/demo</div>
+</header>
+
+<main>
+<section class="hero">
+  <div>
+    <p class="eyebrow">BIST • GÜNLÜK TARAMA</p>
+    <h1>Bugün hangi hisseler<br><span>takip edilmeye değer?</span></h1>
+    <p class="sub">Teknik momentum, trend, RSI, MACD ve hacim göstergelerini tek ekranda puanla.</p>
+  </div>
+  <div class="hero-card"><strong id="count">0</strong><span>tarama sonucu</span></div>
+</section>
+
+<section class="controls">
+  <input id="search" placeholder="Hisse ara: ASELS, FROTO..." />
+  <select id="signal"><option value="">Tüm sinyaller</option><option>GÜÇLÜ</option><option>İZLE</option><option>NÖTR</option><option>ZAYIF</option></select>
+  <select id="sort"><option value="score">Skor</option><option value="ret21">21G getiri</option><option value="volume">Hacim oranı</option><option value="rsi">RSI</option></select>
+</section>
+
+<section class="cards">
+  <div class="metric"><span>Güçlü</span><b id="strong">0</b></div>
+  <div class="metric"><span>İzle</span><b id="watch">0</b></div>
+  <div class="metric"><span>Ortalama skor</span><b id="avg">0</b></div>
+  <div class="metric"><span>En yüksek 21G</span><b id="best21">-</b></div>
+</section>
+
+<section class="panel">
+  <div class="panel-title"><h2>Günlük tarama</h2><span>Demo veri — gerçek veri bağlantısı eklenebilir</span></div>
+  <div class="table-wrap">
+  <table><thead><tr>
+    <th>Kod</th><th>Fiyat</th><th>Günlük</th><th>21G</th><th>RSI</th><th>Hacim</th><th>Skor</th><th>Sinyal</th>
+  </tr></thead><tbody id="tbody"></tbody></table>
+  </div>
+</section>
+
+<section class="info">
+  <h2>Skor nasıl hesaplanıyor?</h2>
+  <div class="grid">
+    <div><b>Trend</b><p>20/50/200 günlük ortalamalarla trend gücü.</p></div>
+    <div><b>Momentum</b><p>5, 21 ve 63 günlük fiyat hareketleri.</p></div>
+    <div><b>Teknik</b><p>RSI ve MACD ile momentum teyidi.</p></div>
+    <div><b>Hacim</b><p>20 günlük ortalamaya göre işlem hacmi.</p></div>
+  </div>
+</section>
+
+<footer>© 2026 BIST Radar • Bu site yatırım tavsiyesi değildir.</footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
