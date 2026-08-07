@@ -1,15 +1,23 @@
 import io
 import json
 import time
-import math
 import requests
 import numpy as np
 import pandas as pd
 import yfinance as yf
 
-SYMBOL_URL = "https://raw.githubusercontent.com/ahmeterenodaci/Istanbul-Stock-Exchange--BIST--including-symbols-and-logos/main/bist.csv"
+SYMBOL_URL = (
+    "https://raw.githubusercontent.com/ahmeterenodaci/"
+    "Istanbul-Stock-Exchange--BIST--including-symbols-and-logos/"
+    "main/bist.csv"
+)
+
 BATCH_SIZE = 25
 
+
+# =========================================================
+# HİSSELER
+# =========================================================
 
 def get_symbols():
     r = requests.get(SYMBOL_URL, timeout=30)
@@ -32,185 +40,417 @@ def get_symbols():
     return dict(zip(df["symbol"], df["name"]))
 
 
-def num(x, default=0.0):
+# =========================================================
+# YARDIMCI FONKSİYONLAR
+# =========================================================
+
+def safe_float(x, default=0.0):
     try:
         x = float(x)
-        return x if math.isfinite(x) else default
+        if np.isfinite(x):
+            return x
     except Exception:
-        return default
+        pass
+
+    return default
 
 
-def clip(x, lo=0, hi=100):
-    return int(round(max(lo, min(hi, num(x, lo)))))
+def clamp(x, low=0, high=100):
+    return int(max(low, min(high, safe_float(x))))
 
 
-def pct_change(c, n):
-    if len(c) <= n:
-        return 0.0
+def pct_change(series, periods):
+    if len(series) <= periods:
+        return 0
 
-    try:
-        return num((c.iloc[-1] / c.iloc[-n - 1] - 1) * 100)
-    except Exception:
-        return 0.0
+    old = safe_float(series.iloc[-periods - 1])
+
+    if old == 0:
+        return 0
+
+    return (safe_float(series.iloc[-1]) / old - 1) * 100
 
 
-# ---------------------------------------------------------
+# =========================================================
 # RSI
-# ---------------------------------------------------------
-def rsi(c, n=14):
-    d = c.diff()
+# =========================================================
 
-    gain = d.clip(lower=0).ewm(
+def rsi(series, n=14):
+    delta = series.diff()
+
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.ewm(
         alpha=1 / n,
         adjust=False
     ).mean()
 
-    loss = (-d.clip(upper=0)).ewm(
+    avg_loss = loss.ewm(
         alpha=1 / n,
         adjust=False
     ).mean()
 
-    rs = gain / loss.replace(0, np.nan)
+    rs = avg_gain / avg_loss.replace(0, np.nan)
 
-    result = 100 - 100 / (1 + rs)
+    result = 100 - (100 / (1 + rs))
 
-    return (
-        result
-        .replace([np.inf, -np.inf], np.nan)
-        .fillna(50)
-    )
+    return result.fillna(50)
 
 
-# ---------------------------------------------------------
-# ATR
-# ---------------------------------------------------------
-def atr(d, n=14):
-    h = d["High"]
-    l = d["Low"]
-    c = d["Close"]
-
-    previous_close = c.shift(1)
-
-    tr = pd.concat(
-        [
-            h - l,
-            (h - previous_close).abs(),
-            (l - previous_close).abs()
-        ],
-        axis=1
-    ).max(axis=1)
-
-    return tr.ewm(
-        alpha=1 / n,
-        adjust=False
-    ).mean()
-
-
-# ---------------------------------------------------------
+# =========================================================
 # ADX
-# ---------------------------------------------------------
-def adx(d, n=14):
+# =========================================================
 
-    h = d["High"]
-    l = d["Low"]
-    c = d["Close"]
+def adx(high, low, close, n=14):
+    high = pd.to_numeric(high, errors="coerce")
+    low = pd.to_numeric(low, errors="coerce")
+    close = pd.to_numeric(close, errors="coerce")
 
-    up = h.diff()
-    down = -l.diff()
+    up_move = high.diff()
+    down_move = -low.diff()
 
-    plus = up.where(
-        (up > down) & (up > 0),
-        0.0
+    plus_dm = np.where(
+        (up_move > down_move) & (up_move > 0),
+        up_move,
+        0
     )
 
-    minus = down.where(
-        (down > up) & (down > 0),
-        0.0
+    minus_dm = np.where(
+        (down_move > up_move) & (down_move > 0),
+        down_move,
+        0
     )
 
-    previous_close = c.shift(1)
+    tr1 = high - low
+    tr2 = (high - close.shift()).abs()
+    tr3 = (low - close.shift()).abs()
 
     tr = pd.concat(
-        [
-            h - l,
-            (h - previous_close).abs(),
-            (l - previous_close).abs()
-        ],
+        [tr1, tr2, tr3],
         axis=1
     ).max(axis=1)
 
-    atr_value = tr.ewm(
+    atr = tr.ewm(
         alpha=1 / n,
         adjust=False
-    ).mean().replace(0, np.nan)
+    ).mean()
 
     plus_di = (
-        100
-        * plus.ewm(alpha=1 / n, adjust=False).mean()
-        / atr_value
+        100 *
+        pd.Series(plus_dm, index=close.index)
+        .ewm(alpha=1 / n, adjust=False)
+        .mean()
+        / atr.replace(0, np.nan)
     )
 
     minus_di = (
-        100
-        * minus.ewm(alpha=1 / n, adjust=False).mean()
-        / atr_value
+        100 *
+        pd.Series(minus_dm, index=close.index)
+        .ewm(alpha=1 / n, adjust=False)
+        .mean()
+        / atr.replace(0, np.nan)
     )
 
     dx = (
-        100
-        * (plus_di - minus_di).abs()
-        / (plus_di + minus_di).replace(0, np.nan)
+        100 *
+        (plus_di - minus_di).abs()
+        /
+        (plus_di + minus_di).replace(0, np.nan)
     )
 
-    return (
-        dx.ewm(alpha=1 / n, adjust=False)
-        .mean()
-        .fillna(0)
-    )
+    return dx.ewm(
+        alpha=1 / n,
+        adjust=False
+    ).mean().fillna(20)
 
 
-# ---------------------------------------------------------
-# OBV
-# ---------------------------------------------------------
-def obv(c, v):
-    direction = np.sign(c.diff()).fillna(0)
-    return (direction * v).cumsum()
+# =========================================================
+# ATR
+# =========================================================
+
+def atr(high, low, close, n=14):
+    tr1 = high - low
+    tr2 = (high - close.shift()).abs()
+    tr3 = (low - close.shift()).abs()
+
+    tr = pd.concat(
+        [tr1, tr2, tr3],
+        axis=1
+    ).max(axis=1)
+
+    return tr.rolling(n).mean()
 
 
-# ---------------------------------------------------------
-# Trend eğimi
-# ---------------------------------------------------------
-def slope_score(series, lookback=20):
+# =========================================================
+# TEKNİK PUAN
+# =========================================================
 
-    s = pd.to_numeric(
-        series,
+def technical_score(
+    price,
+    ma20,
+    ma50,
+    ma100,
+    ma200,
+    rsi_value,
+    macd,
+    macd_signal,
+    adx_value,
+    ret21,
+    ret63,
+    ret126
+):
+
+    score = 0
+
+    # Fiyat / ortalamalar
+    if price > ma20:
+        score += 15
+
+    if price > ma50:
+        score += 15
+
+    if price > ma200:
+        score += 15
+
+    # Ortalama trendi
+    if ma20 > ma50:
+        score += 10
+
+    if ma50 > ma100:
+        score += 10
+
+    if ma100 > ma200:
+        score += 10
+
+    # RSI
+    if 50 <= rsi_value <= 68:
+        score += 10
+    elif 45 <= rsi_value < 50:
+        score += 6
+    elif 68 < rsi_value <= 75:
+        score += 7
+    elif rsi_value > 75:
+        score += 3
+
+    # MACD
+    if macd > macd_signal:
+        score += 10
+
+    # ADX trend gücü
+    if adx_value >= 30:
+        score += 5
+    elif adx_value >= 20:
+        score += 3
+
+    return clamp(score)
+
+
+# =========================================================
+# MOMENTUM PUANI
+# =========================================================
+
+def momentum_score(ret21, ret63, ret126):
+
+    score = 50
+
+    # 1 aylık
+    if ret21 > 10:
+        score += 15
+    elif ret21 > 5:
+        score += 10
+    elif ret21 > 0:
+        score += 5
+    elif ret21 < -10:
+        score -= 15
+    elif ret21 < -5:
+        score -= 10
+    elif ret21 < 0:
+        score -= 5
+
+    # 3 aylık
+    if ret63 > 15:
+        score += 15
+    elif ret63 > 5:
+        score += 10
+    elif ret63 > 0:
+        score += 5
+    elif ret63 < -15:
+        score -= 15
+    elif ret63 < -5:
+        score -= 10
+
+    # 6 aylık
+    if ret126 > 25:
+        score += 20
+    elif ret126 > 10:
+        score += 12
+    elif ret126 > 0:
+        score += 5
+    elif ret126 < -20:
+        score -= 20
+    elif ret126 < -10:
+        score -= 12
+
+    return clamp(score)
+
+
+# =========================================================
+# PARA AKIŞI / HACİM
+# =========================================================
+
+def flow_score(close, volume):
+
+    volume = pd.to_numeric(
+        volume,
         errors="coerce"
-    ).dropna()
+    ).fillna(0)
 
-    if len(s) < lookback + 5:
-        return 50
+    avg20 = volume.rolling(20).mean()
 
-    y = s.iloc[-lookback:].values
-    x = np.arange(len(y))
+    last_avg = safe_float(avg20.iloc[-1], 1)
 
-    slope = np.polyfit(x, y, 1)[0]
+    if last_avg <= 0:
+        volume_ratio = 1
+    else:
+        volume_ratio = (
+            safe_float(volume.iloc[-1])
+            / last_avg
+        )
 
-    base = abs(np.mean(y))
+    ret21 = pct_change(close, 21)
 
-    if base == 0:
-        return 50
+    score = 50
 
-    relative_slope = slope / base * 100
+    if volume_ratio >= 2:
+        score += 30
+    elif volume_ratio >= 1.5:
+        score += 20
+    elif volume_ratio >= 1.2:
+        score += 10
+    elif volume_ratio < 0.7:
+        score -= 10
 
-    return clip(
-        50 + relative_slope * 35
+    if ret21 > 0 and volume_ratio > 1:
+        score += 15
+
+    if ret21 < 0 and volume_ratio > 1.5:
+        score -= 15
+
+    return clamp(score), volume_ratio
+
+
+# =========================================================
+# RİSK PUANI
+# =========================================================
+
+def risk_score(close):
+
+    returns = close.pct_change().dropna()
+
+    if len(returns) < 30:
+        return 50, 0
+
+    volatility = (
+        returns
+        .rolling(20)
+        .std()
+        .iloc[-1]
+        * np.sqrt(252)
+        * 100
     )
 
+    volatility = safe_float(volatility)
+
+    # Son 6 aylık maksimum düşüş
+    recent = close.tail(126)
+
+    rolling_max = recent.cummax()
+
+    drawdown = (
+        recent / rolling_max - 1
+    )
+
+    max_drawdown = abs(
+        safe_float(drawdown.min()) * 100
+    )
+
+    score = 100
+
+    # Volatilite
+    if volatility > 70:
+        score -= 45
+    elif volatility > 50:
+        score -= 30
+    elif volatility > 35:
+        score -= 20
+    elif volatility > 25:
+        score -= 10
+
+    # Maksimum düşüş
+    if max_drawdown > 40:
+        score -= 30
+    elif max_drawdown > 30:
+        score -= 20
+    elif max_drawdown > 20:
+        score -= 10
+
+    return clamp(score, 20, 100), volatility
+
 
 # =========================================================
-# ANA SKOR MOTORU
+# RELATİF GÜÇ
 # =========================================================
-def score(sym, name, d):
+
+def relative_strength(stock, benchmark):
+
+    if benchmark is None or benchmark.empty:
+        return 50, 0
+
+    stock21 = pct_change(stock, 21)
+    bench21 = pct_change(benchmark, 21)
+
+    stock63 = pct_change(stock, 63)
+    bench63 = pct_change(benchmark, 63)
+
+    diff21 = stock21 - bench21
+    diff63 = stock63 - bench63
+
+    score = 50
+
+    if diff21 > 10:
+        score += 20
+    elif diff21 > 5:
+        score += 12
+    elif diff21 > 0:
+        score += 5
+    elif diff21 < -10:
+        score -= 20
+    elif diff21 < -5:
+        score -= 12
+    elif diff21 < 0:
+        score -= 5
+
+    if diff63 > 15:
+        score += 20
+    elif diff63 > 5:
+        score += 10
+    elif diff63 < -15:
+        score -= 20
+    elif diff63 < -5:
+        score -= 10
+
+    return clamp(score), diff21
+
+
+# =========================================================
+# ANA SKOR
+# =========================================================
+
+def score(sym, name, d, benchmark):
+
+    if d is None or d.empty:
+        return None
 
     required = {
         "Close",
@@ -219,486 +459,298 @@ def score(sym, name, d):
         "Volume"
     }
 
-    if (
-        d is None
-        or d.empty
-        or not required.issubset(d.columns)
-    ):
+    if not required.issubset(d.columns):
         return None
 
-    d = d.copy()
-
-    for col in required:
-        d[col] = pd.to_numeric(
-            d[col],
-            errors="coerce"
-        )
-
-    d = d.dropna(
-        subset=[
-            "Close",
-            "High",
-            "Low"
-        ]
+    close = pd.to_numeric(
+        d["Close"],
+        errors="coerce"
     )
 
-    if len(d) < 220:
+    high = pd.to_numeric(
+        d["High"],
+        errors="coerce"
+    )
+
+    low = pd.to_numeric(
+        d["Low"],
+        errors="coerce"
+    )
+
+    volume = pd.to_numeric(
+        d["Volume"],
+        errors="coerce"
+    ).fillna(0)
+
+    frame = pd.concat(
+        [
+            close.rename("Close"),
+            high.rename("High"),
+            low.rename("Low"),
+            volume.rename("Volume")
+        ],
+        axis=1
+    ).dropna(subset=["Close"])
+
+    if len(frame) < 220:
         return None
 
-    c = d["Close"]
-    h = d["High"]
-    l = d["Low"]
-    v = d["Volume"]
-
-    price = num(c.iloc[-1])
+    close = frame["Close"]
+    high = frame["High"]
+    low = frame["Low"]
+    volume = frame["Volume"]
 
     # -----------------------------------------------------
-    # HAREKETLİ ORTALAMALAR
+    # ORTALAMALAR
     # -----------------------------------------------------
-    e20 = c.ewm(
-        span=20,
-        adjust=False
-    ).mean()
 
-    e50 = c.ewm(
-        span=50,
-        adjust=False
-    ).mean()
+    ma20 = close.rolling(20).mean()
+    ma50 = close.rolling(50).mean()
+    ma100 = close.rolling(100).mean()
+    ma200 = close.rolling(200).mean()
 
-    m50 = c.rolling(50).mean()
-    m200 = c.rolling(200).mean()
+    price = safe_float(close.iloc[-1])
 
     # -----------------------------------------------------
     # RSI
     # -----------------------------------------------------
-    rsi_value = num(
-        rsi(c).iloc[-1],
-        50
-    )
+
+    rsi_series = rsi(close)
+    rsi_value = safe_float(rsi_series.iloc[-1])
 
     # -----------------------------------------------------
     # MACD
     # -----------------------------------------------------
-    e12 = c.ewm(
+
+    ema12 = close.ewm(
         span=12,
         adjust=False
     ).mean()
 
-    e26 = c.ewm(
+    ema26 = close.ewm(
         span=26,
         adjust=False
     ).mean()
 
-    macd = e12 - e26
+    macd_series = ema12 - ema26
 
-    signal_line = macd.ewm(
+    macd_signal_series = macd_series.ewm(
         span=9,
         adjust=False
     ).mean()
 
-    macd_hist = num(
-        macd.iloc[-1] -
-        signal_line.iloc[-1]
+    macd_value = safe_float(macd_series.iloc[-1])
+    macd_signal = safe_float(
+        macd_signal_series.iloc[-1]
     )
 
     # -----------------------------------------------------
     # ADX
     # -----------------------------------------------------
-    adx_value = num(
-        adx(d).iloc[-1],
-        0
+
+    adx_series = adx(
+        high,
+        low,
+        close
+    )
+
+    adx_value = safe_float(
+        adx_series.iloc[-1]
     )
 
     # -----------------------------------------------------
     # GETİRİLER
     # -----------------------------------------------------
-    ret5 = pct_change(c, 5)
-    ret21 = pct_change(c, 21)
-    ret63 = pct_change(c, 63)
+
+    ret21 = pct_change(close, 21)
+    ret63 = pct_change(close, 63)
+    ret126 = pct_change(close, 126)
 
     # -----------------------------------------------------
     # HACİM
     # -----------------------------------------------------
-    volume_average = num(
-        v.rolling(20).mean().iloc[-1],
-        1
-    )
 
-    if volume_average > 0:
-        volume_ratio = num(
-            v.iloc[-1] / volume_average,
-            1
-        )
-    else:
-        volume_ratio = 1
-
-    # -----------------------------------------------------
-    # ATR
-    # -----------------------------------------------------
-    atr_value = num(
-        atr(d).iloc[-1]
-    )
-
-    atr_pct = (
-        atr_value / price * 100
-        if price > 0
-        else 0
+    flow, volume_ratio = flow_score(
+        close,
+        volume
     )
 
     # -----------------------------------------------------
-    # VOLATİLİTE
+    # RİSK
     # -----------------------------------------------------
-    volatility = num(
-        c.pct_change()
-        .rolling(20)
-        .std()
-        .iloc[-1]
-        * np.sqrt(252)
-        * 100
+
+    risk, volatility = risk_score(
+        close
     )
 
     # -----------------------------------------------------
-    # KIRILIM
+    # RELATİF GÜÇ
     # -----------------------------------------------------
-    high20 = num(
-        c.iloc[-21:-1].max(),
-        price
-    )
 
-    high60 = num(
-        c.iloc[-61:-1].max(),
-        price
-    )
-
-    breakout20 = (
-        price >= high20 * 0.995
-        if high20
-        else False
-    )
-
-    breakout60 = (
-        price >= high60 * 0.995
-        if high60
-        else False
+    relative, relative_diff = relative_strength(
+        close,
+        benchmark
     )
 
     # -----------------------------------------------------
-    # 60 GÜNLÜK ZİRVE
+    # TEKNİK
     # -----------------------------------------------------
-    peak60 = num(
-        c.rolling(60).max().iloc[-1],
-        price
-    )
 
-    drawdown60 = (
-        (price / peak60 - 1) * 100
-        if peak60
-        else 0
-    )
-
-    # -----------------------------------------------------
-    # OBV
-    # -----------------------------------------------------
-    obv_series = obv(c, v)
-
-    obv_score = slope_score(
-        obv_series,
-        20
-    )
-
-    # -----------------------------------------------------
-    # POZİTİF GÜN ORANI
-    # -----------------------------------------------------
-    daily_returns = (
-        c.pct_change()
-        .dropna()
-    )
-
-    positive_days = num(
-        (
-            daily_returns.tail(20) > 0
-        ).mean() * 100,
-        50
-    )
-
-    # =====================================================
-    # 1 — TREND
-    # =====================================================
-    trend = 0
-
-    trend += (
-        18
-        if price > e20.iloc[-1]
-        else 5
-    )
-
-    trend += (
-        16
-        if e20.iloc[-1] > e50.iloc[-1]
-        else 5
-    )
-
-    trend += (
-        16
-        if m50.iloc[-1] > m200.iloc[-1]
-        else 5
-    )
-
-    trend += (
-        12
-        if price > m200.iloc[-1]
-        else 3
-    )
-
-    trend += (
-        10
-        if adx_value >= 25
-        else 7
-        if adx_value >= 18
-        else 3
-    )
-
-    trend += (
-        10
-        if macd.iloc[-1] > signal_line.iloc[-1]
-        else 4
-    )
-
-    trend += (
-        8
-        if macd_hist > 0
-        else 3
-    )
-
-    trend += (
-        10
-        if slope_score(e20, 20) >= 55
-        else 3
-    )
-
-    technical = clip(trend)
-
-    # =====================================================
-    # 2 — MOMENTUM
-    # =====================================================
-    momentum = 0
-
-    momentum += np.interp(
-        ret5,
-        [-6, -1, 1, 3, 6],
-        [0, 4, 8, 12, 16]
-    )
-
-    momentum += np.interp(
+    technical = technical_score(
+        price,
+        safe_float(ma20.iloc[-1]),
+        safe_float(ma50.iloc[-1]),
+        safe_float(ma100.iloc[-1]),
+        safe_float(ma200.iloc[-1]),
+        rsi_value,
+        macd_value,
+        macd_signal,
+        adx_value,
         ret21,
-        [-15, -3, 3, 8, 18],
-        [0, 5, 10, 15, 20]
-    )
-
-    momentum += np.interp(
         ret63,
-        [-25, -5, 5, 15, 35],
-        [0, 5, 10, 15, 20]
-    )
-
-    # RSI
-    if 52 <= rsi_value <= 68:
-        momentum += 12
-    elif 45 <= rsi_value < 52:
-        momentum += 9
-    elif 68 < rsi_value <= 74:
-        momentum += 9
-    elif 40 <= rsi_value < 45:
-        momentum += 5
-    elif 74 < rsi_value <= 78:
-        momentum += 5
-    else:
-        momentum += 2
-
-    momentum = clip(momentum)
-
-    # =====================================================
-    # 3 — HACİM / PARA AKIŞI
-    # =====================================================
-    flow = 50
-
-    flow += (
-        volume_ratio - 1
-    ) * 28
-
-    flow += max(
-        0,
-        ret5
-    ) * 1.2
-
-    flow += (
-        obv_score - 50
-    ) * 0.20
-
-    if (
-        breakout20
-        and volume_ratio >= 1.20
-    ):
-        flow += 10
-
-    flow = clip(flow)
-
-    # =====================================================
-    # 4 — KIRILIM SKORU
-    # =====================================================
-    breakout = 0
-
-    breakout += (
-        40 if breakout20 else 8
-    )
-
-    breakout += (
-        25 if breakout60 else 5
-    )
-
-    breakout += (
-        20
-        if volume_ratio >= 1.20
-        else 10
-        if volume_ratio >= 1
-        else 3
-    )
-
-    breakout += (
-        15
-        if (
-            price > e20.iloc[-1]
-            and e20.iloc[-1] > e50.iloc[-1]
-        )
-        else 5
-    )
-
-    breakout = clip(breakout)
-
-    # =====================================================
-    # 5 — RİSK
-    # =====================================================
-    risk = 100
-
-    risk -= max(
-        0,
-        volatility - 18
-    ) * 2
-
-    risk -= max(
-        0,
-        atr_pct - 4
-    ) * 4
-
-    risk -= max(
-        0,
-        -drawdown60 - 12
-    ) * 1.5
-
-    risk = clip(
-        risk,
-        20,
-        100
-    )
-
-    # =====================================================
-    # 6 — İSTİKRAR
-    # =====================================================
-    stability = (
-        positive_days * 0.55
-        + (
-            50
-            if 8 <= volatility <= 28
-            else 35
-        )
-        + (
-            15
-            if adx_value >= 20
-            else 5
-        )
-    )
-
-    stability = clip(
-        stability / 1.2
+        ret126
     )
 
     # -----------------------------------------------------
-    # Temel/KAP verisi henüz harici kaynaktan alınmadığı
-    # için sahte avantaj oluşturmamak adına nötr.
+    # MOMENTUM
     # -----------------------------------------------------
+
+    momentum = momentum_score(
+        ret21,
+        ret63,
+        ret126
+    )
+
+    # -----------------------------------------------------
+    # PİYASA KALİTESİ
+    #
+    # Temel veri ayrı modül gelene kadar:
+    # fiyat davranışından kalite puanı çıkarıyoruz.
+    # -----------------------------------------------------
+
+    trend_quality = (
+        technical * 0.45
+        + momentum * 0.30
+        + relative * 0.25
+    )
+
+    market_quality = clamp(
+        trend_quality
+    )
+
+    # Fundamental ve valuation şu anda
+    # sahte veri üretmemesi için nötr tutuluyor.
     fundamental = 50
     valuation = 50
     kap = 50
 
-    # =====================================================
-    # ANA SKOR
-    # =====================================================
+    # -----------------------------------------------------
+    # TOPLAM SKOR
+    # -----------------------------------------------------
+    #
+    # Teknik       %25
+    # Momentum     %20
+    # Para akışı   %15
+    # Relatif güç  %15
+    # Risk         %10
+    # Piyasa kalite %15
+    #
+
     total = (
-        technical * 0.30
-        + momentum * 0.23
+        technical * 0.25
+        + momentum * 0.20
         + flow * 0.15
-        + breakout * 0.10
+        + relative * 0.15
         + risk * 0.10
-        + stability * 0.07
-        + fundamental * 0.025
-        + valuation * 0.025
+        + market_quality * 0.15
     )
 
-    total = clip(total)
+    total = clamp(
+        round(total)
+    )
 
-    # =====================================================
+    # -----------------------------------------------------
     # SİNYAL
-    # =====================================================
+    # -----------------------------------------------------
+
     if total >= 75:
         signal = "GÜÇLÜ"
-    elif total >= 60:
-        signal = "İZLE"
-    elif total >= 45:
+    elif total >= 65:
+        signal = "POZİTİF"
+    elif total >= 55:
         signal = "NÖTR"
-    else:
+    elif total >= 45:
         signal = "ZAYIF"
+    else:
+        signal = "NEGATİF"
+
+    # -----------------------------------------------------
+    # EK SİNYALLER
+    # -----------------------------------------------------
+
+    signals = []
+
+    if price > safe_float(ma20.iloc[-1]):
+        signals.append("TREND")
+
+    if macd_value > macd_signal:
+        signals.append("MACD")
+
+    if adx_value >= 25:
+        signals.append("ADX")
+
+    if volume_ratio >= 1.5:
+        signals.append("HACİM")
+
+    if relative_diff > 5:
+        signals.append("RELATİF")
+
+    if ret21 > 5:
+        signals.append("MOMENTUM")
+
+    # -----------------------------------------------------
+    # SONUÇ
+    # -----------------------------------------------------
 
     return {
         "code": sym,
         "name": name,
+
         "price": round(price, 2),
 
-        "technical": technical,
-        "momentum": momentum,
-
-        "fundamental": fundamental,
-        "valuation": valuation,
-        "kap": kap,
-
-        "flow": flow,
-        "breakoutScore": breakout,
-        "stability": stability,
-        "riskScore": risk,
-
-        "score": total,
+        "score": int(total),
         "signal": signal,
 
-        "ret5": round(ret5, 2),
-        "ret21": round(ret21, 2),
-        "ret63": round(ret63, 2),
+        "technical": int(technical),
+        "momentum": int(momentum),
+        "flow": int(flow),
+        "relativeStrength": int(relative),
+        "riskScore": int(risk),
+
+        "fundamental": int(fundamental),
+        "valuation": int(valuation),
+        "kap": int(kap),
+
+        "rsi": round(rsi_value, 2),
+        "adx": round(adx_value, 2),
 
         "volumeRatio": round(
             volume_ratio,
             2
         ),
 
-        "rsi": round(
-            rsi_value,
+        "ret21": round(
+            ret21,
             2
         ),
 
-        "adx": round(
-            adx_value,
+        "ret63": round(
+            ret63,
             2
         ),
 
-        "atrPct": round(
-            atr_pct,
+        "ret126": round(
+            ret126,
             2
         ),
 
@@ -707,33 +759,79 @@ def score(sym, name, d):
             2
         ),
 
-        "drawdown60": round(
-            drawdown60,
+        "distance52High": round(
+            (
+                price /
+                safe_float(close.tail(252).max(), price)
+                - 1
+            ) * 100,
             2
         ),
 
-        "positiveDays20": round(
-            positive_days,
-            1
-        ),
-
-        "breakout20": breakout20,
-        "breakout60": breakout60
+        "signals": signals
     }
 
 
 # =========================================================
-# VERİ GÜNCELLEME
+# ANA PROGRAM
 # =========================================================
+
 def main():
 
     names = get_symbols()
+
     syms = list(names)
 
     print(
         "BIST sembol sayısı:",
         len(syms)
     )
+
+    # -----------------------------------------------------
+    # BIST 100 / XU100 BENCHMARK
+    # -----------------------------------------------------
+
+    print("BIST benchmark indiriliyor...")
+
+    try:
+
+        benchmark_raw = yf.download(
+            "^XU100",
+            period="2y",
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+            timeout=30
+        )
+
+        if isinstance(
+            benchmark_raw.columns,
+            pd.MultiIndex
+        ):
+            benchmark = benchmark_raw["Close"].iloc[:, 0]
+        else:
+            benchmark = benchmark_raw["Close"]
+
+        benchmark = pd.to_numeric(
+            benchmark,
+            errors="coerce"
+        ).dropna()
+
+    except Exception as e:
+
+        print(
+            "Benchmark alınamadı:",
+            e
+        )
+
+        benchmark = pd.Series(
+            dtype=float
+        )
+
+    # -----------------------------------------------------
+    # HİSSELER
+    # -----------------------------------------------------
 
     out = []
     failed = []
@@ -759,7 +857,7 @@ def main():
                     s + ".IS"
                     for s in batch
                 ],
-                period="1y",
+                period="2y",
                 interval="1d",
                 auto_adjust=True,
                 group_by="ticker",
@@ -782,45 +880,54 @@ def main():
             try:
 
                 d = None
-                ticker = s + ".IS"
 
                 if (
                     raw is not None
                     and not raw.empty
-                    and isinstance(
-                        raw.columns,
-                        pd.MultiIndex
-                    )
                 ):
 
-                    if (
-                        ticker
-                        in raw.columns.get_level_values(0)
+                    if isinstance(
+                        raw.columns,
+                        pd.MultiIndex
                     ):
 
-                        d = raw[
+                        ticker = s + ".IS"
+
+                        if (
                             ticker
-                        ].copy()
+                            in raw.columns
+                            .get_level_values(0)
+                        ):
 
-                    elif (
-                        ticker
-                        in raw.columns.get_level_values(1)
-                    ):
+                            d = raw[
+                                ticker
+                            ].copy()
 
-                        d = raw.xs(
-                            ticker,
-                            axis=1,
-                            level=1
-                        ).copy()
+                        elif (
+                            ticker
+                            in raw.columns
+                            .get_level_values(1)
+                        ):
 
-                x = score(
+                            d = raw.xs(
+                                ticker,
+                                axis=1,
+                                level=1
+                            ).copy()
+
+                    else:
+
+                        d = raw.copy()
+
+                result = score(
                     s,
                     names[s],
-                    d
+                    d,
+                    benchmark
                 )
 
-                if x:
-                    out.append(x)
+                if result is not None:
+                    out.append(result)
                 else:
                     failed.append(s)
 
@@ -837,8 +944,9 @@ def main():
         time.sleep(1)
 
     # -----------------------------------------------------
-    # SKOR SIRALAMASI
+    # SIRALA
     # -----------------------------------------------------
+
     out.sort(
         key=lambda x: x["score"],
         reverse=True
@@ -847,6 +955,7 @@ def main():
     # -----------------------------------------------------
     # JSON
     # -----------------------------------------------------
+
     with open(
         "data.json",
         "w",
@@ -861,46 +970,38 @@ def main():
             separators=(",", ":")
         )
 
+    print()
+    print(
+        "================================"
+    )
     print(
         "BAŞARILI:",
         len(out)
     )
-
     print(
         "VERİ YOK:",
         len(failed)
     )
-
     print(
-        "İLK 20:",
-        [
-            x["code"]
-            for x in out[:20]
-        ]
-    )
-
-    # -----------------------------------------------------
-    # GÜÇLÜ HİSSELER
-    # -----------------------------------------------------
-    strong = [
-        x for x in out
-        if x["score"] >= 75
-    ]
-
-    print(
-        "GÜÇLÜ SİNYAL:",
-        len(strong)
+        "================================"
     )
 
     print(
-        "GÜÇLÜ İLK 20:",
-        [
-            x["code"]
-            for x in strong[:20]
-        ]
+        "İLK 20:"
     )
 
-    # Güvenlik kontrolü
+    for i, x in enumerate(
+        out[:20],
+        1
+    ):
+
+        print(
+            i,
+            x["code"],
+            x["score"],
+            x["signal"]
+        )
+
     if len(out) < 400:
 
         raise RuntimeError(
