@@ -1,12 +1,13 @@
 name: BIST Radar Günlük Güncelleme
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '0 3 * * 1-5'
+    - cron: "30 17 * * 1-5"
+  workflow_dispatch:
 
-permissions:
-  contents: write
+concurrency:
+  group: bist-radar-update
+  cancel-in-progress: false
 
 jobs:
   update:
@@ -103,16 +104,24 @@ jobs:
           PY
 
       - name: Değişiklikleri GitHub'a gönder
-        run: |
-          git config user.name "BIST Radar Bot"
-          git config user.email "bist-radar-bot@users.noreply.github.com"
+  run: |
+    git config user.name "BIST Radar Bot"
+    git config user.email "bist-radar-bot@users.noreply.github.com"
 
-          git add data.json
+    git add data.json
 
-          if git diff --cached --quiet; then
-            echo "Yeni veri değişikliği yok."
-            exit 0
-          fi
+    if git diff --cached --quiet; then
+      echo "Veri değişikliği yok."
+      exit 0
+    fi
 
-          git commit -m "BIST verilerini güncelle"
-          git push origin HEAD:ana
+    git commit -m "BIST verilerini güncelle"
+
+    # GitHub'daki son değişiklikleri al
+    git fetch origin ana
+
+    # Uzak ana dalındaki yeni commitleri kendi commitimizin altına al
+    git rebase origin/ana
+
+    # Güncel dalı GitHub'a gönder
+    git push origin HEAD:ana
