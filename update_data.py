@@ -1,33 +1,53 @@
 import io
 import json
+import math
 import time
 import requests
 import numpy as np
 import pandas as pd
 import yfinance as yf
 
-SYMBOL_URL = "https://raw.githubusercontent.com/ahmeterenodaci/Istanbul-Stock-Exchange--BIST--including-symbols-and-logos/main/bist.csv"
 
-BATCH_SIZE = 10
-RETRY_COUNT = 3
+# ============================================================
+# BIST RADAR - GELİŞMİŞ SKOR MOTORU
+# ============================================================
+
+SYMBOL_URL = (
+    "https://raw.githubusercontent.com/ahmeterenodaci/"
+    "Istanbul-Stock-Exchange--BIST--including-symbols-and-logos/"
+    "main/bist.csv"
+)
+
+BATCH_SIZE = 25
 MIN_HISTORY = 220
 
 
-# ---------------------------------------------------------
-# BIST HİSSELERİNİ AL
-# ---------------------------------------------------------
+# ============================================================
+# YARDIMCI FONKSİYONLAR
+# ============================================================
+
+def safe_float(x, default=None):
+    try:
+        if x is None:
+            return default
+
+        x = float(x)
+
+        if not math.isfinite(x):
+            return default
+
+        return x
+    except Exception:
+        return default
+
+
+def clamp(x, low=0, high=100):
+    x = safe_float(x, low)
+    return max(low, min(high, x))
+
 
 def get_symbols():
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
-
-    r = requests.get(
-        SYMBOL_URL,
-        headers=headers,
-        timeout=30
-    )
-
+    r = requests.get(SYMBOL_URL, timeout=30)
     r.raise_for_status()
 
     df = pd.read_csv(io.StringIO(r.text))
@@ -47,12 +67,11 @@ def get_symbols():
     return dict(zip(df["symbol"], df["name"]))
 
 
-# ---------------------------------------------------------
-# RSI
-# ---------------------------------------------------------
+# ============================================================
+# TEKNİK İNDİKATÖRLER
+# ============================================================
 
 def rsi(series, period=14):
-
     delta = series.diff()
 
     gain = delta.clip(lower=0)
@@ -75,291 +94,521 @@ def rsi(series, period=14):
     return result.fillna(50)
 
 
-# ---------------------------------------------------------
-# STOCHASTIC RSI
-# ---------------------------------------------------------
+def atr(high, low, close, period=14):
+    prev_close = close.shift(1)
 
-def stochastic_rsi(series, period=14):
+    tr1 = high - low
+    tr2 = (high - prev_close).abs()
+    tr3 = (low - prev_close).abs()
 
-    rr = rsi(series, period)
+    true_range = pd.concat(
+        [tr1, tr2, tr3],
+        axis=1
+    ).max(axis=1)
 
-    low = rr.rolling(period).min()
-    high = rr.rolling(period).max()
-
-    stoch = (rr - low) / (high - low).replace(0, np.nan)
-
-    return (stoch * 100).fillna(50)
+    return true_range.ewm(
+        alpha=1 / period,
+        adjust=False
+    ).mean()
 
 
-# ---------------------------------------------------------
+def adx(high, low, close, period=14):
+    up_move = high.diff()
+    down_move = -low.diff()
+
+    plus_dm = np.where(
+        (up_move > down_move) & (up_move > 0),
+        up_move,
+        0
+    )
+
+    minus_dm = np.where(
+        (down_move > up_move) & (down_move > 0),
+        down_move,
+        0
+    )
+
+    atr_value = atr(
+        high,
+        low,
+        close,
+        period
+    )
+
+    plus_di = (
+        pd.Series(plus_dm, index=close.index)
+        .ewm(alpha=1 / period, adjust=False)
+        .mean()
+        / atr_value.replace(0, np.nan)
+        * 100
+    )
+
+    minus_di = (
+        pd.Series(minus_dm, index=close.index)
+        .ewm(alpha=1 / period, adjust=False)
+        .mean()
+        / atr_value.replace(0, np.nan)
+        * 100
+    )
+
+    dx = (
+        (plus_di - minus_di).abs()
+        / (plus_di + minus_di).replace(0, np.nan)
+        * 100
+    )
+
+    return dx.ewm(
+        alpha=1 / period,
+        adjust=False
+    ).mean().fillna(0)
+
+
+# ============================================================
 # TEKNİK SKOR
-# ---------------------------------------------------------
+# ============================================================
 
-def calculate_technical_score(c):
-
-    if len(c) < MIN_HISTORY:
-        return 0
-
-    price = float(c.iloc[-1])
+def technical_score(c, high, low, volume):
 
     sma20 = c.rolling(20).mean()
     sma50 = c.rolling(50).mean()
-    sma100 = c.rolling(100).mean()
     sma200 = c.rolling(200).mean()
 
-    s20 = float(sma20.iloc[-1])
-    s50 = float(sma50.iloc[-1])
-    s100 = float(sma100.iloc[-1])
-    s200 = float(sma200.iloc[-1])
+    r = rsi(c)
+    a = adx(high, low, c)
 
-    rr = float(rsi(c).iloc[-1])
+    ema12 = c.ewm(
+        span=12,
+        adjust=False
+    ).mean()
 
-    # MACD
-    ema12 = c.ewm(span=12, adjust=False).mean()
-    ema26 = c.ewm(span=26, adjust=False).mean()
+    ema26 = c.ewm(
+        span=26,
+        adjust=False
+    ).mean()
 
     macd = ema12 - ema26
-    signal = macd.ewm(span=9, adjust=False).mean()
 
-    macd_now = float(macd.iloc[-1])
-    signal_now = float(signal.iloc[-1])
+    signal = macd.ewm(
+        span=9,
+        adjust=False
+    ).mean()
+
+    price = c.iloc[-1]
 
     score = 0
+    signals = []
 
-    # -------------------------
-    # Trend
-    # -------------------------
+    # --------------------------------------------------------
+    # SMA TREND
+    # --------------------------------------------------------
 
-    if price > s20:
+    if price > sma20.iloc[-1]:
         score += 8
+        signals.append("Fiyat SMA20 üzerinde")
     else:
         score += 2
 
-    if price > s50:
+    if sma20.iloc[-1] > sma50.iloc[-1]:
         score += 8
+        signals.append("SMA20 > SMA50")
     else:
         score += 2
 
-    if price > s200:
-        score += 10
+    if sma50.iloc[-1] > sma200.iloc[-1]:
+        score += 8
+        signals.append("SMA50 > SMA200")
     else:
         score += 2
 
-    # SMA sıralaması
-    if s20 > s50 > s200:
-        score += 12
-    elif s20 > s50:
-        score += 7
-    elif s50 > s200:
-        score += 5
-
-    # -------------------------
+    # --------------------------------------------------------
     # RSI
-    # -------------------------
+    # --------------------------------------------------------
 
-    if 52 <= rr <= 68:
-        score += 12
-    elif 45 <= rr < 52:
+    rv = safe_float(r.iloc[-1], 50)
+
+    if 50 <= rv <= 68:
         score += 8
-    elif 68 < rr <= 75:
-        score += 7
-    elif rr > 75:
+        signals.append("RSI sağlıklı bölgede")
+    elif 68 < rv <= 75:
+        score += 6
+        signals.append("RSI güçlü")
+    elif rv < 30:
         score += 3
+        signals.append("RSI aşırı satım")
+    elif rv > 75:
+        score += 2
+        signals.append("RSI aşırı alım")
     else:
         score += 4
 
-    # -------------------------
+    # --------------------------------------------------------
     # MACD
-    # -------------------------
+    # --------------------------------------------------------
 
-    if macd_now > signal_now and macd_now > 0:
-        score += 15
-    elif macd_now > signal_now:
-        score += 10
+    if macd.iloc[-1] > signal.iloc[-1]:
+        score += 8
+        signals.append("MACD pozitif")
     else:
+        score += 2
+
+    # --------------------------------------------------------
+    # ADX
+    # --------------------------------------------------------
+
+    adx_value = safe_float(a.iloc[-1], 0)
+
+    if adx_value >= 30:
+        score += 8
+        signals.append("Güçlü trend")
+    elif adx_value >= 20:
+        score += 6
+        signals.append("Trend oluşuyor")
+    else:
+        score += 3
+
+    # --------------------------------------------------------
+    # 52 HAFTALIK KONUM
+    # --------------------------------------------------------
+
+    high52 = c.tail(252).max()
+    low52 = c.tail(252).min()
+
+    if high52 > low52:
+        position52 = (
+            (price - low52)
+            / (high52 - low52)
+            * 100
+        )
+    else:
+        position52 = 50
+
+    if position52 >= 80:
+        score += 7
+        signals.append("52 hafta zirvesine yakın")
+    elif position52 >= 60:
+        score += 6
+    elif position52 >= 40:
         score += 4
+    else:
+        score += 2
 
-    return min(100, int(score))
+    return {
+        "score": int(clamp(score, 0, 55)),
+        "rsi": round(rv, 2),
+        "adx": round(adx_value, 2),
+        "position52": round(position52, 2),
+        "signals": signals,
+    }
 
 
-# ---------------------------------------------------------
+# ============================================================
 # MOMENTUM
-# ---------------------------------------------------------
+# ============================================================
 
-def calculate_momentum(c):
+def momentum_score(c):
 
-    if len(c) < 100:
-        return 50
+    price = safe_float(c.iloc[-1], 0)
 
-    ret5 = (c.iloc[-1] / c.iloc[-6] - 1) * 100
-    ret21 = (c.iloc[-1] / c.iloc[-22] - 1) * 100
-    ret63 = (c.iloc[-1] / c.iloc[-64] - 1) * 100
-
-    score = 50
-
-    if ret5 > 0:
-        score += 5
-
-    if ret5 > 3:
-        score += 5
-
-    if ret21 > 0:
-        score += 10
-
-    if ret21 > 10:
-        score += 5
-
-    if ret63 > 0:
-        score += 10
-
-    if ret63 > 20:
-        score += 5
-
-    if ret21 < -10:
-        score -= 10
-
-    return int(max(0, min(100, score)))
-
-
-# ---------------------------------------------------------
-# HACİM SKORU
-# ---------------------------------------------------------
-
-def calculate_flow(c, v):
-
-    if len(v) < 30:
-        return 50, 1
-
-    avg20 = v.rolling(20).mean().iloc[-1]
-
-    if avg20 <= 0:
-        return 50, 1
-
-    volume_ratio = float(v.iloc[-1] / avg20)
-
-    price_change = float(
-        (c.iloc[-1] / c.iloc[-2] - 1) * 100
+    ret21 = (
+        (price / c.iloc[-22] - 1) * 100
+        if len(c) >= 22
+        else 0
     )
 
-    score = 50
+    ret63 = (
+        (price / c.iloc[-64] - 1) * 100
+        if len(c) >= 64
+        else 0
+    )
 
-    if volume_ratio > 1.2:
+    ret126 = (
+        (price / c.iloc[-127] - 1) * 100
+        if len(c) >= 127
+        else 0
+    )
+
+    score = 0
+    signals = []
+
+    # 1 aylık momentum
+    if ret21 >= 10:
+        score += 8
+        signals.append("1 aylık güçlü momentum")
+    elif ret21 >= 5:
+        score += 6
+    elif ret21 > 0:
+        score += 4
+    else:
+        score += 1
+
+    # 3 aylık momentum
+    if ret63 >= 20:
         score += 10
+        signals.append("3 aylık güçlü momentum")
+    elif ret63 >= 10:
+        score += 8
+    elif ret63 > 0:
+        score += 5
+    else:
+        score += 1
 
-    if volume_ratio > 1.5:
+    # 6 aylık momentum
+    if ret126 >= 30:
         score += 10
+        signals.append("6 aylık güçlü momentum")
+    elif ret126 >= 15:
+        score += 8
+    elif ret126 > 0:
+        score += 5
+    else:
+        score += 1
 
-    if volume_ratio > 2:
-        score += 10
-
-    # Hacim artarken fiyat yükseliyorsa pozitif
-    if price_change > 0 and volume_ratio > 1.2:
-        score += 10
-
-    # Hacim artarken fiyat düşüyorsa negatif
-    if price_change < 0 and volume_ratio > 1.5:
-        score -= 15
-
-    return int(max(0, min(100, score))), round(volume_ratio, 2)
+    return {
+        "score": int(clamp(score, 0, 30)),
+        "ret21": round(ret21, 2),
+        "ret63": round(ret63, 2),
+        "ret126": round(ret126, 2),
+        "signals": signals,
+    }
 
 
-# ---------------------------------------------------------
+# ============================================================
+# HACİM / PARA AKIŞI
+# ============================================================
+
+def flow_score(c, volume):
+
+    volume = volume.fillna(0)
+
+    vol20 = volume.rolling(20).mean()
+    vol5 = volume.rolling(5).mean()
+
+    latest20 = safe_float(vol20.iloc[-1], 0)
+    latest5 = safe_float(vol5.iloc[-1], 0)
+    latest = safe_float(volume.iloc[-1], 0)
+
+    if latest20 > 0:
+        volume_ratio = latest / latest20
+    else:
+        volume_ratio = 1
+
+    if latest20 > 0:
+        volume_momentum = latest5 / latest20
+    else:
+        volume_momentum = 1
+
+    score = 0
+    signals = []
+
+    if volume_ratio >= 2:
+        score += 8
+        signals.append("Hacim patlaması")
+    elif volume_ratio >= 1.5:
+        score += 7
+        signals.append("Hacim güçlü")
+    elif volume_ratio >= 1.15:
+        score += 5
+    elif volume_ratio >= 0.8:
+        score += 3
+    else:
+        score += 1
+
+    if volume_momentum >= 1.3:
+        score += 7
+        signals.append("Hacim ivmeleniyor")
+    elif volume_momentum >= 1.1:
+        score += 5
+    else:
+        score += 2
+
+    return {
+        "score": int(clamp(score, 0, 15)),
+        "volumeRatio": round(volume_ratio, 2),
+        "volumeMomentum": round(volume_momentum, 2),
+        "signals": signals,
+    }
+
+
+# ============================================================
 # RİSK
-# ---------------------------------------------------------
+# ============================================================
 
-def calculate_risk(c):
+def risk_score(c):
 
     returns = c.pct_change().dropna()
 
-    if len(returns) < 20:
-        return 50, 0
-
-    volatility = float(
-        returns.tail(20).std() *
-        np.sqrt(252) *
-        100
+    volatility = (
+        returns.tail(20).std()
+        * np.sqrt(252)
+        * 100
     )
 
-    # Volatilite düşükse daha yüksek puan
-    risk_score = 100 - volatility * 1.5
+    volatility = safe_float(volatility, 50)
 
-    risk_score = int(
-        max(20, min(95, risk_score))
+    drawdown_series = (
+        c / c.cummax() - 1
     )
 
-    return risk_score, round(volatility, 2)
-
-
-# ---------------------------------------------------------
-# KIRILIM SKORU
-# ---------------------------------------------------------
-
-def calculate_breakout(c):
-
-    if len(c) < 65:
-        return 50
-
-    price = float(c.iloc[-1])
-
-    high20 = float(
-        c.iloc[-21:-1].max()
+    max_drawdown = (
+        abs(drawdown_series.tail(252).min())
+        * 100
     )
 
-    high60 = float(
-        c.iloc[-61:-1].max()
-    )
+    score = 10
+    signals = []
 
-    score = 50
+    if volatility <= 20:
+        score += 10
+        signals.append("Düşük volatilite")
+    elif volatility <= 30:
+        score += 8
+    elif volatility <= 45:
+        score += 5
+    elif volatility <= 60:
+        score += 3
+    else:
+        score += 1
+        signals.append("Yüksek volatilite")
 
-    if price > high20:
-        score += 20
+    if max_drawdown <= 20:
+        score += 5
+    elif max_drawdown <= 35:
+        score += 4
+    elif max_drawdown <= 50:
+        score += 2
+    else:
+        score += 1
 
-    if price > high60:
-        score += 25
-
-    return min(100, score)
-
-
-# ---------------------------------------------------------
-# 52 HAFTA KONUMU
-# ---------------------------------------------------------
-
-def calculate_position(c):
-
-    if len(c) < 200:
-        return 50
-
-    year = c.tail(252)
-
-    low = float(year.min())
-    high = float(year.max())
-    price = float(c.iloc[-1])
-
-    if high <= low:
-        return 50
-
-    position = (price - low) / (high - low) * 100
-
-    # Çok dipte olan hisselere değil,
-    # güçlü ama aşırı şişmemiş hisselere avantaj
-    if 55 <= position <= 85:
-        return 90
-
-    if 40 <= position < 55:
-        return 70
-
-    if 85 < position <= 95:
-        return 65
-
-    if position > 95:
-        return 45
-
-    return 50
+    return {
+        "score": int(clamp(score, 0, 15)),
+        "volatility": round(volatility, 2),
+        "maxDrawdown": round(max_drawdown, 2),
+        "signals": signals,
+    }
 
 
-# ---------------------------------------------------------
+# ============================================================
+# TEMEL / DEĞERLEME
+# ============================================================
+
+def fundamental_score(sym):
+
+    """
+    Yahoo Finance finansal verisi mevcutsa kullanılır.
+    Veri alınamazsa puan uydurulmaz.
+    """
+
+    result = {
+        "score": None,
+        "valuation": None,
+        "fundamentalData": False,
+    }
+
+    try:
+        ticker = yf.Ticker(sym + ".IS")
+
+        info = ticker.info or {}
+
+        roe = safe_float(info.get("returnOnEquity"))
+        debt = safe_float(info.get("debtToEquity"))
+        margin = safe_float(info.get("profitMargins"))
+        pe = safe_float(info.get("trailingPE"))
+        pb = safe_float(info.get("priceToBook"))
+
+        fundamental = 50
+        valuation = 50
+
+        fundamental_count = 0
+        valuation_count = 0
+
+        # ROE
+        if roe is not None:
+            fundamental_count += 1
+
+            if roe >= 0.25:
+                fundamental += 15
+            elif roe >= 0.15:
+                fundamental += 10
+            elif roe >= 0.08:
+                fundamental += 5
+            elif roe < 0:
+                fundamental -= 15
+
+        # Borç / özkaynak
+        if debt is not None:
+            fundamental_count += 1
+
+            if debt <= 50:
+                fundamental += 15
+            elif debt <= 100:
+                fundamental += 8
+            elif debt <= 200:
+                fundamental += 2
+            else:
+                fundamental -= 10
+
+        # Net kâr marjı
+        if margin is not None:
+            fundamental_count += 1
+
+            if margin >= 0.20:
+                fundamental += 10
+            elif margin >= 0.10:
+                fundamental += 7
+            elif margin > 0:
+                fundamental += 3
+            else:
+                fundamental -= 10
+
+        # F/K
+        if pe is not None and pe > 0:
+            valuation_count += 1
+
+            if pe < 8:
+                valuation += 15
+            elif pe < 12:
+                valuation += 10
+            elif pe < 18:
+                valuation += 5
+            elif pe > 35:
+                valuation -= 15
+
+        # PD/DD
+        if pb is not None and pb > 0:
+            valuation_count += 1
+
+            if pb < 1:
+                valuation += 15
+            elif pb < 1.5:
+                valuation += 10
+            elif pb < 2.5:
+                valuation += 5
+            elif pb > 5:
+                valuation -= 10
+
+        if fundamental_count > 0:
+            result["score"] = int(
+                clamp(fundamental)
+            )
+
+        if valuation_count > 0:
+            result["valuation"] = int(
+                clamp(valuation)
+            )
+
+        result["fundamentalData"] = (
+            fundamental_count > 0
+        )
+
+    except Exception as e:
+        print("Temel veri alınamadı:", sym, e)
+
+    return result
+
+
+# ============================================================
 # ANA SKOR
-# ---------------------------------------------------------
+# ============================================================
 
 def score(sym, name, d):
 
@@ -376,7 +625,7 @@ def score(sym, name, d):
         errors="coerce"
     ).dropna()
 
-    v = pd.to_numeric(
+    volume = pd.to_numeric(
         d["Volume"],
         errors="coerce"
     ).fillna(0)
@@ -384,258 +633,170 @@ def score(sym, name, d):
     if len(c) < MIN_HISTORY:
         return None
 
-    price = float(c.iloc[-1])
+    high = pd.to_numeric(
+        d["High"],
+        errors="coerce"
+    ).reindex(c.index)
 
-    # Teknik
-    technical = calculate_technical_score(c)
+    low = pd.to_numeric(
+        d["Low"],
+        errors="coerce"
+    ).reindex(c.index)
 
-    # Momentum
-    momentum = calculate_momentum(c)
+    high = high.fillna(c)
+    low = low.fillna(c)
 
-    # Hacim
-    flow, volume_ratio = calculate_flow(c, v)
-
-    # Risk
-    risk, volatility = calculate_risk(c)
-
-    # Kırılım
-    breakout = calculate_breakout(c)
-
-    # 52 hafta konumu
-    position = calculate_position(c)
-
-    # RSI
-    current_rsi = float(
-        rsi(c).iloc[-1]
+    technical = technical_score(
+        c,
+        high,
+        low,
+        volume
     )
 
-    # 21 günlük getiri
-    ret21 = float(
-        (price / c.iloc[-22] - 1) * 100
+    momentum = momentum_score(c)
+
+    flow = flow_score(
+        c,
+        volume
     )
 
-    # -----------------------------------------------------
-    # TEMEL / DEĞERLEME
-    #
-    # Bunları daha sonra KAP + bilanço verisiyle gerçek
-    # veriye bağlayacağız.
-    # -----------------------------------------------------
+    risk = risk_score(c)
 
-    fundamental = 50
-    valuation = 50
-    kap = 50
+    fundamental = fundamental_score(sym)
 
-    # -----------------------------------------------------
-    # YENİ GENEL SKOR
-    # -----------------------------------------------------
+    price = safe_float(c.iloc[-1], 0)
 
+    # --------------------------------------------------------
+    # AĞIRLIKLAR
+    # --------------------------------------------------------
+
+    tech100 = technical["score"] / 55 * 100
+    momentum100 = momentum["score"] / 30 * 100
+    flow100 = flow["score"] / 15 * 100
+    risk100 = risk["score"] / 25 * 100
+
+    fundamental100 = (
+        fundamental["score"]
+        if fundamental["score"] is not None
+        else 50
+    )
+
+    valuation100 = (
+        fundamental["valuation"]
+        if fundamental["valuation"] is not None
+        else 50
+    )
+
+    # Teknik + momentum + temel + değerleme
     total = (
-        technical * 0.30 +
-        momentum * 0.15 +
-        flow * 0.15 +
-        breakout * 0.10 +
-        position * 0.10 +
-        risk * 0.10 +
-        fundamental * 0.05 +
-        valuation * 0.05
+        tech100 * 0.25
+        + momentum100 * 0.20
+        + fundamental100 * 0.15
+        + valuation100 * 0.10
+        + flow100 * 0.15
+        + risk100 * 0.15
     )
 
-    # -----------------------------------------------------
-    # AŞIRI RSI CEZASI
-    # -----------------------------------------------------
+    total = int(round(clamp(total)))
 
-    if current_rsi > 80:
-        total -= 8
+    # --------------------------------------------------------
+    # SINIF
+    # --------------------------------------------------------
 
-    elif current_rsi > 75:
-        total -= 4
+    if total >= 85:
+        rating = "Çok Güçlü"
+    elif total >= 75:
+        rating = "Güçlü"
+    elif total >= 65:
+        rating = "İzle"
+    elif total >= 50:
+        rating = "Nötr"
+    else:
+        rating = "Zayıf"
 
-    # -----------------------------------------------------
-    # ÇOK GÜÇLÜ TREND BONUSU
-    # -----------------------------------------------------
+    signals = []
 
-    sma20 = c.rolling(20).mean().iloc[-1]
-    sma50 = c.rolling(50).mean().iloc[-1]
-    sma200 = c.rolling(200).mean().iloc[-1]
+    signals.extend(technical["signals"])
+    signals.extend(momentum["signals"])
+    signals.extend(flow["signals"])
+    signals.extend(risk["signals"])
 
-    if price > sma20 > sma50 > sma200:
-        total += 5
+    # --------------------------------------------------------
+    # ÖZEL SİNYALLER
+    # --------------------------------------------------------
 
-    # Hacim + momentum birlikte
-    if volume_ratio > 1.5 and ret21 > 5:
-        total += 5
+    if (
+        technical["position52"] >= 90
+        and momentum["ret21"] > 5
+    ):
+        signals.append("Yeni zirve momentumu")
 
-    total = int(
-        max(0, min(100, round(total)))
-    )
+    if (
+        flow["volumeRatio"] >= 1.5
+        and momentum["ret21"] > 0
+    ):
+        signals.append("Hacim destekli yükseliş")
+
+    if (
+        technical["rsi"] >= 50
+        and technical["rsi"] <= 70
+        and technical["adx"] >= 20
+    ):
+        signals.append("Sağlıklı trend")
 
     return {
         "code": sym,
         "name": name,
         "price": round(price, 2),
 
-        "technical": int(technical),
-        "fundamental": int(fundamental),
-        "valuation": int(valuation),
-        "kap": int(kap),
+        "technical": round(tech100),
+        "momentum": round(momentum100),
 
-        "momentum": int(momentum),
-        "breakout": int(breakout),
-        "position": int(position),
+        "fundamental": (
+            int(fundamental100)
+            if fundamental["fundamentalData"]
+            else None
+        ),
 
-        "flow": int(flow),
-        "riskScore": int(risk),
+        "valuation": (
+            int(valuation100)
+            if fundamental["valuation"] is not None
+            else None
+        ),
+
+        "flow": round(flow100),
+        "riskScore": round(risk100),
 
         "score": total,
+        "rating": rating,
 
-        "ret21": round(ret21, 2),
-        "volumeRatio": volume_ratio,
-        "rsi": round(current_rsi, 2),
-        "volatility": volatility
+        "ret21": momentum["ret21"],
+        "ret63": momentum["ret63"],
+        "ret126": momentum["ret126"],
+
+        "volumeRatio": flow["volumeRatio"],
+        "volumeMomentum": flow["volumeMomentum"],
+
+        "rsi": technical["rsi"],
+        "adx": technical["adx"],
+        "position52": technical["position52"],
+
+        "volatility": risk["volatility"],
+        "maxDrawdown": risk["maxDrawdown"],
+
+        "signals": signals[:12],
     }
 
 
-# ---------------------------------------------------------
-# YAHOO DOWNLOAD
-# ---------------------------------------------------------
-
-def download_batch(batch):
-
-    tickers = [
-        s + ".IS"
-        for s in batch
-    ]
-
-    for attempt in range(1, RETRY_COUNT + 1):
-
-        try:
-
-            print(
-                f"Yahoo deneme {attempt}/{RETRY_COUNT}: "
-                f"{len(batch)} hisse"
-            )
-
-            raw = yf.download(
-                tickers,
-                period="1y",
-                interval="1d",
-                auto_adjust=True,
-                group_by="ticker",
-                threads=False,
-                progress=False,
-                timeout=60
-            )
-
-            if raw is not None and not raw.empty:
-                return raw
-
-        except Exception as e:
-
-            print(
-                "Yahoo hata:",
-                repr(e)
-            )
-
-        time.sleep(3 * attempt)
-
-    return None
-
-
-# ---------------------------------------------------------
-# DATAFRAME ÇIKAR
-# ---------------------------------------------------------
-
-def extract_symbol(raw, symbol):
-
-    if raw is None or raw.empty:
-        return None
-
-    ticker = symbol + ".IS"
-
-    try:
-
-        if isinstance(raw.columns, pd.MultiIndex):
-
-            level0 = raw.columns.get_level_values(0)
-            level1 = raw.columns.get_level_values(1)
-
-            if ticker in level0:
-                return raw[ticker].copy()
-
-            if ticker in level1:
-                return raw.xs(
-                    ticker,
-                    axis=1,
-                    level=1
-                ).copy()
-
-        else:
-
-            return raw.copy()
-
-    except Exception as e:
-
-        print(
-            "Dataframe çıkarma hatası",
-            symbol,
-            repr(e)
-        )
-
-    return None
-
-
-# ---------------------------------------------------------
-# TEK HİSSE FALLBACK
-# ---------------------------------------------------------
-
-def download_single(symbol):
-
-    ticker = symbol + ".IS"
-
-    for attempt in range(1, RETRY_COUNT + 1):
-
-        try:
-
-            d = yf.download(
-                ticker,
-                period="1y",
-                interval="1d",
-                auto_adjust=True,
-                progress=False,
-                threads=False,
-                timeout=60
-            )
-
-            if d is not None and not d.empty:
-
-                if isinstance(d.columns, pd.MultiIndex):
-
-                    d.columns = d.columns.get_level_values(0)
-
-                return d
-
-        except Exception as e:
-
-            print(
-                "Tekil hata:",
-                symbol,
-                repr(e)
-            )
-
-        time.sleep(2 * attempt)
-
-    return None
-
-
-# ---------------------------------------------------------
-# MAIN
-# ---------------------------------------------------------
+# ============================================================
+# ANA PROGRAM
+# ============================================================
 
 def main():
 
     names = get_symbols()
 
-    syms = list(names.keys())
+    syms = list(names)
 
     print(
         "BIST sembol sayısı:",
@@ -644,10 +805,6 @@ def main():
 
     out = []
     failed = []
-
-    # -----------------------------------------------------
-    # TOPLU İNDİR
-    # -----------------------------------------------------
 
     for i in range(
         0,
@@ -663,16 +820,59 @@ def main():
             f"[{i + 1}-{i + len(batch)} / {len(syms)}]"
         )
 
-        raw = download_batch(batch)
+        try:
+
+            raw = yf.download(
+                [
+                    s + ".IS"
+                    for s in batch
+                ],
+                period="1y",
+                interval="1d",
+                auto_adjust=True,
+                group_by="ticker",
+                threads=True,
+                progress=False,
+                timeout=30
+            )
+
+        except Exception as e:
+
+            print(
+                "BATCH ERROR:",
+                e
+            )
+
+            raw = None
 
         for s in batch:
 
             try:
 
-                d = extract_symbol(
-                    raw,
-                    s
-                )
+                d = None
+
+                if (
+                    raw is not None
+                    and not raw.empty
+                    and isinstance(
+                        raw.columns,
+                        pd.MultiIndex
+                    )
+                ):
+
+                    ticker = s + ".IS"
+
+                    if ticker in raw.columns.get_level_values(0):
+
+                        d = raw[ticker].copy()
+
+                    elif ticker in raw.columns.get_level_values(1):
+
+                        d = raw.xs(
+                            ticker,
+                            axis=1,
+                            level=1
+                        ).copy()
 
                 x = score(
                     s,
@@ -681,94 +881,34 @@ def main():
                 )
 
                 if x is not None:
-
                     out.append(x)
-
                 else:
-
                     failed.append(s)
 
             except Exception as e:
 
                 print(
-                    "SKIP:",
+                    "SKIP",
                     s,
-                    repr(e)
+                    e
                 )
 
                 failed.append(s)
 
         time.sleep(1)
 
-    # -----------------------------------------------------
-    # BAŞARISIZLARI TEK TEK DENE
-    # -----------------------------------------------------
-
-    if failed:
-
-        print(
-            "Tekrar denenecek:",
-            len(failed)
-        )
-
-        retry_failed = failed[:]
-        failed = []
-
-        for s in retry_failed:
-
-            try:
-
-                d = download_single(s)
-
-                x = score(
-                    s,
-                    names[s],
-                    d
-                )
-
-                if x is not None:
-
-                    out.append(x)
-
-                else:
-
-                    failed.append(s)
-
-            except Exception as e:
-
-                print(
-                    "FINAL SKIP:",
-                    s,
-                    repr(e)
-                )
-
-                failed.append(s)
-
-            time.sleep(0.5)
-
-    # -----------------------------------------------------
-    # DUPLICATE TEMİZLE
-    # -----------------------------------------------------
-
-    unique = {}
-
-    for x in out:
-        unique[x["code"]] = x
-
-    out = list(unique.values())
-
-    # -----------------------------------------------------
-    # SKOR SIRALAMA
-    # -----------------------------------------------------
+    # ========================================================
+    # SIRALAMA
+    # ========================================================
 
     out.sort(
         key=lambda x: x["score"],
         reverse=True
     )
 
-    # -----------------------------------------------------
+    # ========================================================
     # JSON
-    # -----------------------------------------------------
+    # ========================================================
 
     with open(
         "data.json",
@@ -780,17 +920,18 @@ def main():
             out,
             f,
             ensure_ascii=False,
+            allow_nan=False,
             separators=(",", ":")
         )
 
-    # -----------------------------------------------------
+    # ========================================================
     # RAPOR
-    # -----------------------------------------------------
+    # ========================================================
 
-    print("")
-    print("==============================")
+    print()
+    print("=" * 60)
     print("BIST RADAR TAMAMLANDI")
-    print("==============================")
+    print("=" * 60)
 
     print(
         "Başarılı:",
@@ -798,31 +939,34 @@ def main():
     )
 
     print(
-        "Veri alınamayan:",
+        "Veri yok:",
         len(failed)
     )
 
+    print()
+
     print(
-        "İlk 20:"
+        "İLK 20 HİSSE:"
     )
 
-    for x in out[:20]:
+    for i, x in enumerate(
+        out[:20],
+        start=1
+    ):
 
         print(
-            x["code"],
-            x["score"],
-            x["price"]
+            f"{i:2}. "
+            f"{x['code']:6} "
+            f"{x['score']:3} "
+            f"{x['rating']:<12} "
+            f"{x['price']}"
         )
 
-    # -----------------------------------------------------
-    # KRİTİK KORUMA
-    # -----------------------------------------------------
+    print("=" * 60)
 
-    if len(out) < 100:
-
+    if len(out) < 400:
         raise RuntimeError(
-            "Çok az hisse üretildi: "
-            + str(len(out))
+            f"Çok az hisse döndü: {len(out)}"
         )
 
 
