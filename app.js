@@ -1,9 +1,531 @@
-let DATA=[];let portfolio=JSON.parse(localStorage.getItem("bistRadarPortfolio")||"[]");
-const demo=[["ASELS","Aselsan",128.4,92,84,78,94,76,86,12.8],["FROTO","Ford Otosan",152.7,88,82,75,82,72,82,8.9],["TCELL","Turkcell",168.1,82,85,80,76,70,80,6.7],["TURSG","Türkiye Sigorta",6.21,81,86,88,84,67,80,5.9],["GWIND","Galata Wind",24.02,79,73,76,88,71,77,4.2],["HTTBT","Hitit Bilgisayar",38.35,76,78,72,73,68,74,3.8],["DOAS","Doğuş Otomotiv",190.4,69,74,70,79,65,71,2.2],["ENTRA","Emlak Konut",4.79,68,70,72,70,64,69,1.9],["ALGYO","Alarko GYO",3.35,62,71,77,66,61,67,-1.7],["AYEN","Ayen Enerji",34.05,58,70,74,69,62,65,-2.1],["GOODY","Goodyear",2.57,49,58,61,63,57,55,-4.8],["SKTAS","Söktaş",3.17,43,45,52,51,70,45,-6.4],["TRILC","Turk İlaç",1.21,37,42,49,47,76,39,-8.7]];
-function loadDemo(){DATA=demo.map(x=>({code:x[0],name:x[1],price:x[2],technical:x[3],fundamental:x[4],valuation:x[5],flow:x[6],riskScore:x[7],score:x[8],ret21:x[9]}))}
-function sig(s){return s>=70?"GÜÇLÜ":s>=55?"İZLE":s>=40?"NÖTR":"ZAYIF"}function badge(s){return `<span class="badge ${s==="GÜÇLÜ"?"g":s==="İZLE"?"i":s==="NÖTR"?"n":"z"}">${s}</span>`}function risk(s){return s>=78?["Düşük","low"]:s>=58?["Orta","med"]:["Yüksek","high"]}
-async function load(){try{let r=await fetch("data.json?"+Date.now());if(!r.ok)throw 0;let d=await r.json();if(!Array.isArray(d)||!d.length)throw 0;DATA=d}catch(e){loadDemo()}}
-function render(){let q=document.getElementById("search").value.toUpperCase(),sg=document.getElementById("signal").value,so=document.getElementById("sort").value;let rows=DATA.filter(x=>(!q||(x.code+" "+x.name).toUpperCase().includes(q))&&(!sg||sig(x.score)===sg));rows.sort((a,b)=>so==="technical"?b.technical-a.technical:so==="fundamental"?b.fundamental-a.fundamental:so==="valuation"?b.valuation-a.valuation:so==="flow"?b.flow-a.flow:so==="ret21"?b.ret21-a.ret21:b.score-a.score);document.getElementById("universe").textContent=DATA.length;document.getElementById("strong").textContent=DATA.filter(x=>sig(x.score)==="GÜÇLÜ").length;document.getElementById("watch").textContent=DATA.filter(x=>sig(x.score)==="İZLE").length;document.getElementById("avg").textContent=DATA.length?Math.round(DATA.reduce((a,b)=>a+b.score,0)/DATA.length):0;document.getElementById("best").textContent=DATA.length?DATA.slice().sort((a,b)=>b.score-a.score)[0].code:"-";document.getElementById("tbody").innerHTML=rows.map(x=>{let r=risk(x.riskScore);return `<tr><td><b>${x.code}</b></td><td>${x.name}</td><td>${Number(x.price).toLocaleString("tr-TR",{minimumFractionDigits:2})}</td><td>${x.technical}</td><td>${x.fundamental}</td><td>${x.valuation}</td><td>${x.flow}</td><td class="${r[1]}">${r[0]}</td><td><b>${x.score}</b></td><td>${badge(sig(x.score))}</td></tr>`}).join("");let top=DATA.slice().sort((a,b)=>b.score-a.score).slice(0,10);document.getElementById("top10").innerHTML=top.map((x,i)=>`<div class="topcard"><div class="rank">#${i+1}</div><b>${x.code}</b><small>${x.name}</small><div class="score">${x.score}<small>/100</small></div>${badge(sig(x.score))}</div>`).join("");renderPortfolio()}
-function renderPortfolio(){document.getElementById("portfolio").innerHTML=portfolio.length?portfolio.map((x,i)=>{let d=DATA.find(y=>y.code===x.code),p=d?(d.price-x.cost)*x.lot:0,q=d?((d.price/x.cost)-1)*100:0;return `<tr><td><b>${x.code}</b></td><td>${x.lot}</td><td>${x.cost}</td><td>${d?d.price:"-"}</td><td class="${p>=0?"pos":"neg"}">${p.toFixed(2)}</td><td class="${q>=0?"pos":"neg"}">${q.toFixed(2)}%</td><td>${d?d.score:"-"}</td><td>${d?badge(sig(d.score)):"-"}</td><td><button onclick="removeP(${i})">Sil</button></td></tr>`}).join(""):`<tr><td colspan="9" class="muted">Henüz hisse eklenmedi.</td></tr>`}
-function addP(){let code=prompt("Hisse kodu (örn. ASELS):");if(!code)return;let lot=Number(prompt("Lot:")),cost=Number(prompt("Ortalama maliyet:"));if(!lot||!cost)return;portfolio.push({code:code.toUpperCase(),lot,cost});localStorage.setItem("bistRadarPortfolio",JSON.stringify(portfolio));renderPortfolio()}function removeP(i){portfolio.splice(i,1);localStorage.setItem("bistRadarPortfolio",JSON.stringify(portfolio));renderPortfolio()}
-["search","signal","sort"].forEach(id=>document.getElementById(id).addEventListener("input",render));document.getElementById("add").onclick=addP;load().then(()=>{document.getElementById("updated").textContent="Son kontrol: "+new Date().toLocaleString("tr-TR");document.getElementById("date").textContent=new Date().toLocaleDateString("tr-TR");render()});
+const DATA_URL = "./data.json";
+
+let stocks = [];
+let filteredStocks = [];
+
+const tbody = document.getElementById("stockTableBody");
+const searchInput = document.getElementById("searchInput");
+const signalFilter = document.getElementById("signalFilter");
+const sortSelect = document.getElementById("sortSelect");
+
+async function loadData() {
+    try {
+        const response = await fetch(DATA_URL + "?v=" + Date.now());
+
+        if (!response.ok) {
+            throw new Error("data.json yüklenemedi");
+        }
+
+        stocks = await response.json();
+
+        stocks = stocks
+            .filter(x => x && x.code)
+            .map(x => ({
+                ...x,
+                score: Number(x.score || 0),
+                technical: Number(x.technical || 0),
+                momentum: Number(x.momentum || 0),
+                flow: Number(x.flow || 0),
+                relativeStrength: Number(x.relativeStrength || 0),
+                riskScore: Number(x.riskScore || 0),
+                rsi: Number(x.rsi || 0),
+                adx: Number(x.adx || 0),
+                volumeRatio: Number(x.volumeRatio || 0),
+                ret21: Number(x.ret21 || 0),
+                ret63: Number(x.ret63 || 0),
+                ret126: Number(x.ret126 || 0),
+                distance52High: Number(x.distance52High || 0)
+            }));
+
+        filteredStocks = [...stocks];
+
+        updateSummary();
+        render();
+
+    } catch (error) {
+        console.error(error);
+
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="10">
+                        Veri yüklenemedi.
+                    </td>
+                </tr>
+            `;
+        }
+    }
+}
+
+
+// --------------------------------------------------
+// RENK
+// --------------------------------------------------
+
+function scoreClass(score) {
+
+    if (score >= 85) return "very-good";
+    if (score >= 75) return "good";
+    if (score >= 65) return "positive";
+    if (score >= 55) return "neutral";
+    if (score >= 45) return "weak";
+
+    return "danger";
+}
+
+
+function signalClass(signal) {
+
+    if (!signal) return "";
+
+    if (signal.includes("ÇOK")) return "very-good";
+    if (signal.includes("GÜÇLÜ")) return "good";
+    if (signal.includes("POZİTİF")) return "positive";
+    if (signal.includes("NÖTR")) return "neutral";
+
+    return "danger";
+}
+
+
+// --------------------------------------------------
+// SAYI
+// --------------------------------------------------
+
+function formatNumber(value, digits = 2) {
+
+    if (!Number.isFinite(Number(value))) {
+        return "-";
+    }
+
+    return Number(value).toFixed(digits);
+}
+
+
+function formatPercent(value) {
+
+    const n = Number(value);
+
+    if (!Number.isFinite(n)) {
+        return "-";
+    }
+
+    const sign = n > 0 ? "+" : "";
+
+    return `${sign}${n.toFixed(2)}%`;
+}
+
+
+// --------------------------------------------------
+// TABLO
+// --------------------------------------------------
+
+function render() {
+
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+
+    const fragment = document.createDocumentFragment();
+
+    filteredStocks.forEach((stock, index) => {
+
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>
+                <strong>${index + 1}</strong>
+            </td>
+
+            <td>
+                <strong>${stock.code}</strong>
+                <div class="stock-name">
+                    ${stock.name || ""}
+                </div>
+            </td>
+
+            <td>
+                ${formatNumber(stock.price)}
+            </td>
+
+            <td>
+                <span class="score ${scoreClass(stock.score)}">
+                    ${stock.score}
+                </span>
+            </td>
+
+            <td>
+                ${stock.technical}
+            </td>
+
+            <td>
+                ${stock.momentum}
+            </td>
+
+            <td>
+                ${stock.flow}
+            </td>
+
+            <td>
+                ${stock.relativeStrength}
+            </td>
+
+            <td>
+                ${stock.riskScore}
+            </td>
+
+            <td>
+                <span class="signal ${signalClass(stock.signal)}">
+                    ${stock.signal || "-"}
+                </span>
+            </td>
+        `;
+
+        tr.addEventListener("click", () => {
+            showStockDetails(stock);
+        });
+
+        fragment.appendChild(tr);
+    });
+
+    tbody.appendChild(fragment);
+
+    updateCount();
+}
+
+
+// --------------------------------------------------
+// SIRALAMA
+// --------------------------------------------------
+
+function sortStocks() {
+
+    const sort = sortSelect?.value || "score";
+
+    filteredStocks.sort((a, b) => {
+
+        switch (sort) {
+
+            case "technical":
+                return b.technical - a.technical;
+
+            case "momentum":
+                return b.momentum - a.momentum;
+
+            case "flow":
+                return b.flow - a.flow;
+
+            case "relative":
+                return b.relativeStrength - a.relativeStrength;
+
+            case "risk":
+                return b.riskScore - a.riskScore;
+
+            case "ret21":
+                return b.ret21 - a.ret21;
+
+            case "volume":
+                return b.volumeRatio - a.volumeRatio;
+
+            case "score":
+            default:
+                return b.score - a.score;
+        }
+    });
+
+    render();
+}
+
+
+// --------------------------------------------------
+// FİLTRE
+// --------------------------------------------------
+
+function applyFilters() {
+
+    const search =
+        searchInput?.value
+            ?.toLowerCase()
+            .trim() || "";
+
+    const signal =
+        signalFilter?.value || "all";
+
+    filteredStocks = stocks.filter(stock => {
+
+        const matchesSearch =
+            !search ||
+            stock.code.toLowerCase().includes(search) ||
+            (stock.name || "")
+                .toLowerCase()
+                .includes(search);
+
+        let matchesSignal = true;
+
+        if (signal === "very") {
+            matchesSignal = stock.score >= 85;
+        }
+
+        if (signal === "strong") {
+            matchesSignal =
+                stock.score >= 75 &&
+                stock.score < 85;
+        }
+
+        if (signal === "positive") {
+            matchesSignal =
+                stock.score >= 65 &&
+                stock.score < 75;
+        }
+
+        if (signal === "neutral") {
+            matchesSignal =
+                stock.score >= 55 &&
+                stock.score < 65;
+        }
+
+        if (signal === "weak") {
+            matchesSignal = stock.score < 55;
+        }
+
+        return (
+            matchesSearch &&
+            matchesSignal
+        );
+    });
+
+    sortStocks();
+}
+
+
+// --------------------------------------------------
+// ÖZET
+// --------------------------------------------------
+
+function updateSummary() {
+
+    const total =
+        document.getElementById("totalStocks");
+
+    const strong =
+        document.getElementById("strongStocks");
+
+    const positive =
+        document.getElementById("positiveStocks");
+
+    const average =
+        document.getElementById("averageScore");
+
+    if (total) {
+        total.textContent = stocks.length;
+    }
+
+    if (strong) {
+        strong.textContent =
+            stocks.filter(x => x.score >= 75).length;
+    }
+
+    if (positive) {
+        positive.textContent =
+            stocks.filter(x => x.score >= 65).length;
+    }
+
+    if (average) {
+
+        const avg =
+            stocks.length
+                ? stocks.reduce(
+                    (sum, x) => sum + x.score,
+                    0
+                ) / stocks.length
+                : 0;
+
+        average.textContent =
+            avg.toFixed(1);
+    }
+}
+
+
+// --------------------------------------------------
+// DETAY PANELİ
+// --------------------------------------------------
+
+function showStockDetails(stock) {
+
+    let modal =
+        document.getElementById("stockModal");
+
+    if (!modal) {
+
+        modal =
+            document.createElement("div");
+
+        modal.id = "stockModal";
+
+        modal.className = "stock-modal";
+
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+
+        <div class="stock-modal-content">
+
+            <button
+                class="modal-close"
+                onclick="closeStockDetails()">
+                ×
+            </button>
+
+            <h2>
+                ${stock.code}
+            </h2>
+
+            <p class="modal-company">
+                ${stock.name || ""}
+            </p>
+
+            <div class="big-score ${scoreClass(stock.score)}">
+                ${stock.score}
+            </div>
+
+            <div class="modal-signal">
+                ${stock.signal || "-"}
+            </div>
+
+            <div class="detail-grid">
+
+                <div>
+                    <span>Fiyat</span>
+                    <strong>${formatNumber(stock.price)} ₺</strong>
+                </div>
+
+                <div>
+                    <span>Teknik</span>
+                    <strong>${stock.technical}</strong>
+                </div>
+
+                <div>
+                    <span>Momentum</span>
+                    <strong>${stock.momentum}</strong>
+                </div>
+
+                <div>
+                    <span>Para Akışı</span>
+                    <strong>${stock.flow}</strong>
+                </div>
+
+                <div>
+                    <span>Relatif Güç</span>
+                    <strong>${stock.relativeStrength}</strong>
+                </div>
+
+                <div>
+                    <span>Risk</span>
+                    <strong>${stock.riskScore}</strong>
+                </div>
+
+                <div>
+                    <span>RSI</span>
+                    <strong>${formatNumber(stock.rsi)}</strong>
+                </div>
+
+                <div>
+                    <span>ADX</span>
+                    <strong>${formatNumber(stock.adx)}</strong>
+                </div>
+
+                <div>
+                    <span>Hacim</span>
+                    <strong>${formatNumber(stock.volumeRatio)}x</strong>
+                </div>
+
+                <div>
+                    <span>21 Gün</span>
+                    <strong>${formatPercent(stock.ret21)}</strong>
+                </div>
+
+                <div>
+                    <span>3 Ay</span>
+                    <strong>${formatPercent(stock.ret63)}</strong>
+                </div>
+
+                <div>
+                    <span>6 Ay</span>
+                    <strong>${formatPercent(stock.ret126)}</strong>
+                </div>
+
+                <div>
+                    <span>52H Zirve</span>
+                    <strong>${formatNumber(stock.distance52High)}%</strong>
+                </div>
+
+            </div>
+
+        </div>
+    `;
+
+    modal.style.display = "flex";
+}
+
+
+function closeStockDetails() {
+
+    const modal =
+        document.getElementById("stockModal");
+
+    if (modal) {
+        modal.style.display = "none";
+    }
+}
+
+
+// --------------------------------------------------
+// SAYI
+// --------------------------------------------------
+
+function updateCount() {
+
+    const element =
+        document.getElementById("stockCount");
+
+    if (element) {
+        element.textContent =
+            `${filteredStocks.length} hisse`;
+    }
+}
+
+
+// --------------------------------------------------
+// EVENTLER
+// --------------------------------------------------
+
+if (searchInput) {
+
+    searchInput.addEventListener(
+        "input",
+        applyFilters
+    );
+}
+
+if (signalFilter) {
+
+    signalFilter.addEventListener(
+        "change",
+        applyFilters
+    );
+}
+
+if (sortSelect) {
+
+    sortSelect.addEventListener(
+        "change",
+        sortStocks
+    );
+}
+
+
+// --------------------------------------------------
+// BAŞLAT
+// --------------------------------------------------
+
+loadData();
