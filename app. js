@@ -1,0 +1,401 @@
+const DATA_URL = "./data.json";
+
+let stocks = [];
+let filtered = [];
+
+const table = document.getElementById("table");
+const search = document.getElementById("search");
+const filter = document.getElementById("filter");
+const sort = document.getElementById("sort");
+
+function num(v){
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function signal(score){
+
+    score = num(score);
+
+    if(score >= 75) return "ÇOK GÜÇLÜ";
+    if(score >= 65) return "GÜÇLÜ";
+    if(score >= 55) return "POZİTİF";
+    if(score >= 45) return "NÖTR";
+    if(score >= 35) return "ZAYIF";
+
+    return "ÇOK ZAYIF";
+}
+
+function signalClass(score){
+
+    score = num(score);
+
+    if(score >= 75) return "vgood";
+    if(score >= 65) return "good";
+    if(score >= 55) return "pos";
+    if(score >= 45) return "neutral";
+    if(score >= 35) return "weak";
+
+    return "bad";
+}
+
+function fmt(v,d=2){
+
+    const n = Number(v);
+
+    if(!Number.isFinite(n)) return "-";
+
+    return n.toFixed(d);
+}
+
+function loadData(){
+
+    fetch(DATA_URL + "?t=" + Date.now())
+
+    .then(r => {
+
+        if(!r.ok){
+            throw new Error("data.json alınamadı");
+        }
+
+        return r.json();
+
+    })
+
+    .then(data => {
+
+        if(!Array.isArray(data)){
+            throw new Error("data.json liste formatında değil");
+        }
+
+        stocks = data.map(x => ({
+
+            code: x.code || "",
+            name: x.name || "",
+            price: num(x.price),
+
+            score: num(x.score),
+            technical: num(x.technical),
+            fundamental: num(x.fundamental),
+            valuation: num(x.valuation),
+
+            flow: num(x.flow),
+            riskScore: num(x.riskScore),
+
+            ret21: num(x.ret21),
+            volumeRatio: num(x.volumeRatio),
+            rsi: num(x.rsi),
+
+            volatility: num(x.volatility)
+
+        }));
+
+        updateSummary();
+
+        applyFilters();
+
+        document.getElementById("status").textContent =
+            stocks.length + " hisse yüklendi";
+
+    })
+
+    .catch(err => {
+
+        console.error(err);
+
+        document.getElementById("status").textContent =
+            "❌ Veri yüklenemedi: " + err.message;
+
+    });
+}
+
+function updateSummary(){
+
+    const total = stocks.length;
+
+    const strong = stocks.filter(
+        x => x.score >= 65
+    ).length;
+
+    const positive = stocks.filter(
+        x => x.score >= 55
+    ).length;
+
+    const average = total
+        ? stocks.reduce((a,b) => a + b.score,0) / total
+        : 0;
+
+    document.getElementById("total").textContent = total;
+
+    document.getElementById("strong").textContent = strong;
+
+    document.getElementById("positive").textContent = positive;
+
+    document.getElementById("average").textContent =
+        average.toFixed(1);
+}
+
+function applyFilters(){
+
+    const q = search.value
+        .toLowerCase()
+        .trim();
+
+    const f = filter.value;
+
+    filtered = stocks.filter(x => {
+
+        const text =
+            (x.code + " " + x.name).toLowerCase();
+
+        if(q && !text.includes(q)){
+            return false;
+        }
+
+        if(f === "very" && x.score < 75)
+            return false;
+
+        if(f === "strong" &&
+            (x.score < 65 || x.score >= 75))
+            return false;
+
+        if(f === "positive" &&
+            (x.score < 55 || x.score >= 65))
+            return false;
+
+        if(f === "neutral" &&
+            (x.score < 45 || x.score >= 55))
+            return false;
+
+        if(f === "weak" &&
+            x.score >= 45)
+            return false;
+
+        return true;
+
+    });
+
+    sortStocks();
+
+    render();
+}
+
+function sortStocks(){
+
+    const key = sort.value;
+
+    filtered.sort((a,b) =>
+        num(b[key]) - num(a[key])
+    );
+}
+
+function render(){
+
+    table.innerHTML = "";
+
+    if(!filtered.length){
+
+        table.innerHTML = `
+        <tr>
+        <td colspan="10">
+        Sonuç bulunamadı.
+        </td>
+        </tr>`;
+
+        return;
+    }
+
+    const fragment =
+        document.createDocumentFragment();
+
+    filtered.forEach((stock,index) => {
+
+        const tr =
+            document.createElement("tr");
+
+        const cls =
+            signalClass(stock.score);
+
+        tr.innerHTML = `
+
+        <td>${index + 1}</td>
+
+        <td>
+            <div class="code">
+                ${stock.code}
+            </div>
+
+            <div class="name">
+                ${stock.name}
+            </div>
+        </td>
+
+        <td>
+            ${fmt(stock.price)}
+        </td>
+
+        <td>
+            <span class="score ${cls}">
+                ${fmt(stock.score,0)}
+            </span>
+        </td>
+
+        <td>
+            ${fmt(stock.technical,0)}
+        </td>
+
+        <td>
+            ${fmt(stock.flow,0)}
+        </td>
+
+        <td>
+            ${fmt(stock.riskScore,0)}
+        </td>
+
+        <td>
+            ${stock.ret21 >= 0 ? "+" : ""}
+            ${fmt(stock.ret21)}%
+        </td>
+
+        <td>
+            ${fmt(stock.volumeRatio)}x
+        </td>
+
+        <td>
+            <span class="signal ${cls}">
+                ${signal(stock.score)}
+            </span>
+        </td>
+
+        `;
+
+        tr.addEventListener(
+            "click",
+            () => showDetails(stock)
+        );
+
+        fragment.appendChild(tr);
+
+    });
+
+    table.appendChild(fragment);
+}
+
+function showDetails(stock){
+
+    document.getElementById("modalCode")
+        .textContent = stock.code;
+
+    document.getElementById("modalName")
+        .textContent = stock.name;
+
+    const cls =
+        signalClass(stock.score);
+
+    document.getElementById("modalScore")
+        .innerHTML = `
+        <div class="score ${cls}"
+             style="font-size:30px;padding:12px 20px">
+            ${fmt(stock.score,0)}
+        </div>
+        `;
+
+    document.getElementById("modalSignal")
+        .innerHTML =
+        `<span class="signal ${cls}">
+        ${signal(stock.score)}
+        </span>`;
+
+    document.getElementById("details")
+        .innerHTML = `
+
+        <div>
+            <small>Fiyat</small>
+            <strong>${fmt(stock.price)} TL</strong>
+        </div>
+
+        <div>
+            <small>Teknik</small>
+            <strong>${fmt(stock.technical,0)}</strong>
+        </div>
+
+        <div>
+            <small>Para Akışı</small>
+            <strong>${fmt(stock.flow,0)}</strong>
+        </div>
+
+        <div>
+            <small>Risk Skoru</small>
+            <strong>${fmt(stock.riskScore,0)}</strong>
+        </div>
+
+        <div>
+            <small>RSI</small>
+            <strong>${fmt(stock.rsi)}</strong>
+        </div>
+
+        <div>
+            <small>Hacim</small>
+            <strong>${fmt(stock.volumeRatio)}x</strong>
+        </div>
+
+        <div>
+            <small>21 Gün</small>
+            <strong>
+                ${stock.ret21 >= 0 ? "+" : ""}
+                ${fmt(stock.ret21)}%
+            </strong>
+        </div>
+
+        <div>
+            <small>Volatilite</small>
+            <strong>${fmt(stock.volatility)}%</strong>
+        </div>
+
+        <div>
+            <small>Değerleme</small>
+            <strong>${fmt(stock.valuation,0)}</strong>
+        </div>
+
+        `;
+
+    document.getElementById("modal")
+        .style.display = "flex";
+}
+
+function closeModal(){
+
+    document.getElementById("modal")
+        .style.display = "none";
+}
+
+search.addEventListener(
+    "input",
+    applyFilters
+);
+
+filter.addEventListener(
+    "change",
+    applyFilters
+);
+
+sort.addEventListener(
+    "change",
+    () => {
+
+        sortStocks();
+        render();
+
+    }
+);
+
+document.getElementById("modal")
+    .addEventListener("click", e => {
+
+        if(e.target.id === "modal"){
+            closeModal();
+        }
+
+    });
+
+loadData();
