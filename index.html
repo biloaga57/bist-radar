@@ -1,531 +1,333 @@
-const DATA_URL = "./data.json";
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>BIST Radar</title>
 
-let stocks = [];
-let filteredStocks = [];
+<style>
+*{box-sizing:border-box}
 
-const tbody = document.getElementById("stockTableBody");
-const searchInput = document.getElementById("searchInput");
-const signalFilter = document.getElementById("signalFilter");
-const sortSelect = document.getElementById("sortSelect");
-
-async function loadData() {
-    try {
-        const response = await fetch(DATA_URL + "?v=" + Date.now());
-
-        if (!response.ok) {
-            throw new Error("data.json yüklenemedi");
-        }
-
-        stocks = await response.json();
-
-        stocks = stocks
-            .filter(x => x && x.code)
-            .map(x => ({
-                ...x,
-                score: Number(x.score || 0),
-                technical: Number(x.technical || 0),
-                momentum: Number(x.momentum || 0),
-                flow: Number(x.flow || 0),
-                relativeStrength: Number(x.relativeStrength || 0),
-                riskScore: Number(x.riskScore || 0),
-                rsi: Number(x.rsi || 0),
-                adx: Number(x.adx || 0),
-                volumeRatio: Number(x.volumeRatio || 0),
-                ret21: Number(x.ret21 || 0),
-                ret63: Number(x.ret63 || 0),
-                ret126: Number(x.ret126 || 0),
-                distance52High: Number(x.distance52High || 0)
-            }));
-
-        filteredStocks = [...stocks];
-
-        updateSummary();
-        render();
-
-    } catch (error) {
-        console.error(error);
-
-        if (tbody) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="10">
-                        Veri yüklenemedi.
-                    </td>
-                </tr>
-            `;
-        }
-    }
+body{
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#0b1220;
+    color:#e5e7eb
 }
 
-
-// --------------------------------------------------
-// RENK
-// --------------------------------------------------
-
-function scoreClass(score) {
-
-    if (score >= 85) return "very-good";
-    if (score >= 75) return "good";
-    if (score >= 65) return "positive";
-    if (score >= 55) return "neutral";
-    if (score >= 45) return "weak";
-
-    return "danger";
+header{
+    background:#111827;
+    border-bottom:1px solid #263244;
+    padding:20px
 }
 
-
-function signalClass(signal) {
-
-    if (!signal) return "";
-
-    if (signal.includes("ÇOK")) return "very-good";
-    if (signal.includes("GÜÇLÜ")) return "good";
-    if (signal.includes("POZİTİF")) return "positive";
-    if (signal.includes("NÖTR")) return "neutral";
-
-    return "danger";
+.header{
+    max-width:1400px;
+    margin:auto
 }
 
-
-// --------------------------------------------------
-// SAYI
-// --------------------------------------------------
-
-function formatNumber(value, digits = 2) {
-
-    if (!Number.isFinite(Number(value))) {
-        return "-";
-    }
-
-    return Number(value).toFixed(digits);
+h1{
+    margin:0 0 6px;
+    font-size:28px
 }
 
-
-function formatPercent(value) {
-
-    const n = Number(value);
-
-    if (!Number.isFinite(n)) {
-        return "-";
-    }
-
-    const sign = n > 0 ? "+" : "";
-
-    return `${sign}${n.toFixed(2)}%`;
+.sub{
+    color:#94a3b8;
+    font-size:14px
 }
 
-
-// --------------------------------------------------
-// TABLO
-// --------------------------------------------------
-
-function render() {
-
-    if (!tbody) return;
-
-    tbody.innerHTML = "";
-
-    const fragment = document.createDocumentFragment();
-
-    filteredStocks.forEach((stock, index) => {
-
-        const tr = document.createElement("tr");
-
-        tr.innerHTML = `
-            <td>
-                <strong>${index + 1}</strong>
-            </td>
-
-            <td>
-                <strong>${stock.code}</strong>
-                <div class="stock-name">
-                    ${stock.name || ""}
-                </div>
-            </td>
-
-            <td>
-                ${formatNumber(stock.price)}
-            </td>
-
-            <td>
-                <span class="score ${scoreClass(stock.score)}">
-                    ${stock.score}
-                </span>
-            </td>
-
-            <td>
-                ${stock.technical}
-            </td>
-
-            <td>
-                ${stock.momentum}
-            </td>
-
-            <td>
-                ${stock.flow}
-            </td>
-
-            <td>
-                ${stock.relativeStrength}
-            </td>
-
-            <td>
-                ${stock.riskScore}
-            </td>
-
-            <td>
-                <span class="signal ${signalClass(stock.signal)}">
-                    ${stock.signal || "-"}
-                </span>
-            </td>
-        `;
-
-        tr.addEventListener("click", () => {
-            showStockDetails(stock);
-        });
-
-        fragment.appendChild(tr);
-    });
-
-    tbody.appendChild(fragment);
-
-    updateCount();
+.container{
+    max-width:1400px;
+    margin:auto;
+    padding:18px
 }
 
-
-// --------------------------------------------------
-// SIRALAMA
-// --------------------------------------------------
-
-function sortStocks() {
-
-    const sort = sortSelect?.value || "score";
-
-    filteredStocks.sort((a, b) => {
-
-        switch (sort) {
-
-            case "technical":
-                return b.technical - a.technical;
-
-            case "momentum":
-                return b.momentum - a.momentum;
-
-            case "flow":
-                return b.flow - a.flow;
-
-            case "relative":
-                return b.relativeStrength - a.relativeStrength;
-
-            case "risk":
-                return b.riskScore - a.riskScore;
-
-            case "ret21":
-                return b.ret21 - a.ret21;
-
-            case "volume":
-                return b.volumeRatio - a.volumeRatio;
-
-            case "score":
-            default:
-                return b.score - a.score;
-        }
-    });
-
-    render();
+.cards{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:12px;
+    margin-bottom:16px
 }
 
-
-// --------------------------------------------------
-// FİLTRE
-// --------------------------------------------------
-
-function applyFilters() {
-
-    const search =
-        searchInput?.value
-            ?.toLowerCase()
-            .trim() || "";
-
-    const signal =
-        signalFilter?.value || "all";
-
-    filteredStocks = stocks.filter(stock => {
-
-        const matchesSearch =
-            !search ||
-            stock.code.toLowerCase().includes(search) ||
-            (stock.name || "")
-                .toLowerCase()
-                .includes(search);
-
-        let matchesSignal = true;
-
-        if (signal === "very") {
-            matchesSignal = stock.score >= 85;
-        }
-
-        if (signal === "strong") {
-            matchesSignal =
-                stock.score >= 75 &&
-                stock.score < 85;
-        }
-
-        if (signal === "positive") {
-            matchesSignal =
-                stock.score >= 65 &&
-                stock.score < 75;
-        }
-
-        if (signal === "neutral") {
-            matchesSignal =
-                stock.score >= 55 &&
-                stock.score < 65;
-        }
-
-        if (signal === "weak") {
-            matchesSignal = stock.score < 55;
-        }
-
-        return (
-            matchesSearch &&
-            matchesSignal
-        );
-    });
-
-    sortStocks();
+.card{
+    background:#111827;
+    border:1px solid #263244;
+    border-radius:14px;
+    padding:18px
 }
 
-
-// --------------------------------------------------
-// ÖZET
-// --------------------------------------------------
-
-function updateSummary() {
-
-    const total =
-        document.getElementById("totalStocks");
-
-    const strong =
-        document.getElementById("strongStocks");
-
-    const positive =
-        document.getElementById("positiveStocks");
-
-    const average =
-        document.getElementById("averageScore");
-
-    if (total) {
-        total.textContent = stocks.length;
-    }
-
-    if (strong) {
-        strong.textContent =
-            stocks.filter(x => x.score >= 75).length;
-    }
-
-    if (positive) {
-        positive.textContent =
-            stocks.filter(x => x.score >= 65).length;
-    }
-
-    if (average) {
-
-        const avg =
-            stocks.length
-                ? stocks.reduce(
-                    (sum, x) => sum + x.score,
-                    0
-                ) / stocks.length
-                : 0;
-
-        average.textContent =
-            avg.toFixed(1);
-    }
+.card small{
+    color:#94a3b8
 }
 
-
-// --------------------------------------------------
-// DETAY PANELİ
-// --------------------------------------------------
-
-function showStockDetails(stock) {
-
-    let modal =
-        document.getElementById("stockModal");
-
-    if (!modal) {
-
-        modal =
-            document.createElement("div");
-
-        modal.id = "stockModal";
-
-        modal.className = "stock-modal";
-
-        document.body.appendChild(modal);
-    }
-
-    modal.innerHTML = `
-
-        <div class="stock-modal-content">
-
-            <button
-                class="modal-close"
-                onclick="closeStockDetails()">
-                ×
-            </button>
-
-            <h2>
-                ${stock.code}
-            </h2>
-
-            <p class="modal-company">
-                ${stock.name || ""}
-            </p>
-
-            <div class="big-score ${scoreClass(stock.score)}">
-                ${stock.score}
-            </div>
-
-            <div class="modal-signal">
-                ${stock.signal || "-"}
-            </div>
-
-            <div class="detail-grid">
-
-                <div>
-                    <span>Fiyat</span>
-                    <strong>${formatNumber(stock.price)} ₺</strong>
-                </div>
-
-                <div>
-                    <span>Teknik</span>
-                    <strong>${stock.technical}</strong>
-                </div>
-
-                <div>
-                    <span>Momentum</span>
-                    <strong>${stock.momentum}</strong>
-                </div>
-
-                <div>
-                    <span>Para Akışı</span>
-                    <strong>${stock.flow}</strong>
-                </div>
-
-                <div>
-                    <span>Relatif Güç</span>
-                    <strong>${stock.relativeStrength}</strong>
-                </div>
-
-                <div>
-                    <span>Risk</span>
-                    <strong>${stock.riskScore}</strong>
-                </div>
-
-                <div>
-                    <span>RSI</span>
-                    <strong>${formatNumber(stock.rsi)}</strong>
-                </div>
-
-                <div>
-                    <span>ADX</span>
-                    <strong>${formatNumber(stock.adx)}</strong>
-                </div>
-
-                <div>
-                    <span>Hacim</span>
-                    <strong>${formatNumber(stock.volumeRatio)}x</strong>
-                </div>
-
-                <div>
-                    <span>21 Gün</span>
-                    <strong>${formatPercent(stock.ret21)}</strong>
-                </div>
-
-                <div>
-                    <span>3 Ay</span>
-                    <strong>${formatPercent(stock.ret63)}</strong>
-                </div>
-
-                <div>
-                    <span>6 Ay</span>
-                    <strong>${formatPercent(stock.ret126)}</strong>
-                </div>
-
-                <div>
-                    <span>52H Zirve</span>
-                    <strong>${formatNumber(stock.distance52High)}%</strong>
-                </div>
-
-            </div>
-
-        </div>
-    `;
-
-    modal.style.display = "flex";
+.card strong{
+    display:block;
+    font-size:28px;
+    margin-top:7px
 }
 
-
-function closeStockDetails() {
-
-    const modal =
-        document.getElementById("stockModal");
-
-    if (modal) {
-        modal.style.display = "none";
-    }
+.controls{
+    display:grid;
+    grid-template-columns:2fr 1fr 1fr;
+    gap:10px;
+    margin-bottom:15px
 }
 
-
-// --------------------------------------------------
-// SAYI
-// --------------------------------------------------
-
-function updateCount() {
-
-    const element =
-        document.getElementById("stockCount");
-
-    if (element) {
-        element.textContent =
-            `${filteredStocks.length} hisse`;
-    }
+input,select{
+    width:100%;
+    padding:13px;
+    border-radius:10px;
+    border:1px solid #334155;
+    background:#111827;
+    color:white
 }
 
-
-// --------------------------------------------------
-// EVENTLER
-// --------------------------------------------------
-
-if (searchInput) {
-
-    searchInput.addEventListener(
-        "input",
-        applyFilters
-    );
+.tablebox{
+    overflow:auto;
+    background:#111827;
+    border:1px solid #263244;
+    border-radius:14px
 }
 
-if (signalFilter) {
-
-    signalFilter.addEventListener(
-        "change",
-        applyFilters
-    );
+table{
+    width:100%;
+    min-width:1050px;
+    border-collapse:collapse
 }
 
-if (sortSelect) {
-
-    sortSelect.addEventListener(
-        "change",
-        sortStocks
-    );
+th{
+    background:#172033;
+    color:#94a3b8;
+    padding:13px 10px;
+    text-align:left;
+    font-size:12px
 }
 
+td{
+    padding:12px 10px;
+    border-top:1px solid #202b3d;
+    font-size:13px
+}
 
-// --------------------------------------------------
-// BAŞLAT
-// --------------------------------------------------
+tr:hover{
+    background:#172033;
+    cursor:pointer
+}
 
-loadData();
+.code{
+    font-weight:bold;
+    font-size:15px
+}
+
+.name{
+    color:#64748b;
+    font-size:11px;
+    margin-top:3px
+}
+
+.score{
+    display:inline-block;
+    min-width:42px;
+    text-align:center;
+    padding:5px 8px;
+    border-radius:7px;
+    font-weight:bold
+}
+
+.vgood{background:#064e3b;color:#6ee7b7}
+.good{background:#14532d;color:#86efac}
+.pos{background:#365314;color:#bef264}
+.neutral{background:#374151;color:#d1d5db}
+.weak{background:#78350f;color:#fdba74}
+.bad{background:#7f1d1d;color:#fca5a5}
+
+.signal{
+    padding:5px 8px;
+    border-radius:7px;
+    font-size:11px;
+    font-weight:bold
+}
+
+#status{
+    color:#94a3b8;
+    margin:12px 0
+}
+
+.modal{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.75);
+    z-index:99;
+    padding:20px;
+    align-items:center;
+    justify-content:center
+}
+
+.modalbox{
+    width:min(650px,100%);
+    max-height:90vh;
+    overflow:auto;
+    background:#111827;
+    border:1px solid #334155;
+    border-radius:18px;
+    padding:25px;
+    position:relative
+}
+
+.close{
+    position:absolute;
+    right:15px;
+    top:10px;
+    background:none;
+    border:0;
+    color:#aaa;
+    font-size:30px
+}
+
+.detail{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    margin-top:20px
+}
+
+.detail div{
+    background:#172033;
+    padding:12px;
+    border-radius:10px
+}
+
+.detail small{
+    display:block;
+    color:#94a3b8;
+    margin-bottom:5px
+}
+
+@media(max-width:700px){
+    .cards{grid-template-columns:repeat(2,1fr)}
+    .controls{grid-template-columns:1fr}
+    .detail{grid-template-columns:repeat(2,1fr)}
+    h1{font-size:23px}
+}
+</style>
+</head>
+
+<body>
+
+<header>
+<div class="header">
+<h1>📡 BIST Radar</h1>
+<div class="sub">
+BIST hisseleri • Teknik analiz • Momentum • Para akışı • Risk
+</div>
+</div>
+</header>
+
+<div class="container">
+
+<div class="cards">
+
+<div class="card">
+<small>Toplam Hisse</small>
+<strong id="total">-</strong>
+</div>
+
+<div class="card">
+<small>Güçlü Hisse</small>
+<strong id="strong">-</strong>
+</div>
+
+<div class="card">
+<small>Pozitif Hisse</small>
+<strong id="positive">-</strong>
+</div>
+
+<div class="card">
+<small>Ortalama Skor</small>
+<strong id="average">-</strong>
+</div>
+
+</div>
+
+<div class="controls">
+
+<input
+id="search"
+placeholder="🔎 Hisse veya şirket ara..."
+>
+
+<select id="filter">
+<option value="all">Tüm hisseler</option>
+<option value="very">Çok Güçlü</option>
+<option value="strong">Güçlü</option>
+<option value="positive">Pozitif</option>
+<option value="neutral">Nötr</option>
+<option value="weak">Zayıf</option>
+</select>
+
+<select id="sort">
+<option value="score">Genel Skor</option>
+<option value="technical">Teknik</option>
+<option value="flow">Para Akışı</option>
+<option value="riskScore">Risk</option>
+<option value="ret21">21 Gün Getiri</option>
+<option value="volumeRatio">Hacim</option>
+<option value="rsi">RSI</option>
+</select>
+
+</div>
+
+<div id="status">Veriler yükleniyor...</div>
+
+<div class="tablebox">
+
+<table>
+
+<thead>
+<tr>
+<th>#</th>
+<th>HİSSE</th>
+<th>FİYAT</th>
+<th>SKOR</th>
+<th>TEKNİK</th>
+<th>AKIŞ</th>
+<th>RİSK</th>
+<th>21G</th>
+<th>HACİM</th>
+<th>SİNYAL</th>
+</tr>
+</thead>
+
+<tbody id="table">
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+<div id="modal" class="modal">
+
+<div class="modalbox">
+
+<button class="close" onclick="closeModal()">×</button>
+
+<h2 id="modalCode"></h2>
+<div id="modalName" class="sub"></div>
+
+<div id="modalScore"></div>
+
+<div id="modalSignal"></div>
+
+<div id="details" class="detail"></div>
+
+</div>
+
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</html>
