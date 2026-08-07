@@ -1,5 +1,5 @@
 import io,json,re,requests,numpy as np,pandas as pd,yfinance as yf
-URL="https://raw.githubusercontent.com/ahmeterenodaci/Istanbul-Stock-Exchange--BIST--including-symbols-and-logos/main/data.csv"
+URL="https://raw.githubusercontent.com/ahmeterenodaci/Istanbul-Stock-Exchange--BIST--including-symbols-and-logos/main/bist.csv"
 def symbols():
  r=requests.get(URL,timeout=20);r.raise_for_status();d=pd.read_csv(io.StringIO(r.text));c="symbol" if "symbol" in d.columns else d.columns[0]
  return sorted(set(re.sub(r"[^A-Z0-9]","",s.upper()) for s in d[c].astype(str) if 2<=len(s)<=6))
