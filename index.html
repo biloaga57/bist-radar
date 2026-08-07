@@ -9,206 +9,238 @@
 *{box-sizing:border-box}
 
 body{
-    margin:0;
-    font-family:Arial,sans-serif;
-    background:#0b1220;
-    color:#e5e7eb
+  margin:0;
+  font-family:Arial,Helvetica,sans-serif;
+  background:#0b1220;
+  color:#e5e7eb;
 }
 
 header{
-    background:#111827;
-    border-bottom:1px solid #263244;
-    padding:20px
-}
-
-.header{
-    max-width:1400px;
-    margin:auto
+  background:#111827;
+  padding:18px 14px;
+  position:sticky;
+  top:0;
+  z-index:20;
+  border-bottom:1px solid #263244;
 }
 
 h1{
-    margin:0 0 6px;
-    font-size:28px
+  margin:0 0 5px;
+  font-size:25px;
 }
 
-.sub{
-    color:#94a3b8;
-    font-size:14px
+.subtitle{
+  color:#94a3b8;
+  font-size:13px;
 }
 
 .container{
-    max-width:1400px;
-    margin:auto;
-    padding:18px
+  max-width:1200px;
+  margin:auto;
+  padding:15px;
 }
 
-.cards{
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    gap:12px;
-    margin-bottom:16px
-}
-
-.card{
-    background:#111827;
-    border:1px solid #263244;
-    border-radius:14px;
-    padding:18px
-}
-
-.card small{
-    color:#94a3b8
-}
-
-.card strong{
-    display:block;
-    font-size:28px;
-    margin-top:7px
+.status{
+  margin-bottom:15px;
+  padding:12px;
+  border-radius:10px;
+  background:#111827;
+  border:1px solid #263244;
+  color:#94a3b8;
 }
 
 .controls{
-    display:grid;
-    grid-template-columns:2fr 1fr 1fr;
-    gap:10px;
-    margin-bottom:15px
+  display:grid;
+  grid-template-columns:1fr 180px 180px;
+  gap:10px;
+  margin-bottom:15px;
 }
 
 input,select{
-    width:100%;
-    padding:13px;
-    border-radius:10px;
-    border:1px solid #334155;
-    background:#111827;
-    color:white
+  width:100%;
+  padding:12px;
+  border-radius:8px;
+  border:1px solid #334155;
+  background:#0f172a;
+  color:#fff;
+  outline:none;
 }
 
-.tablebox{
-    overflow:auto;
-    background:#111827;
-    border:1px solid #263244;
-    border-radius:14px
+.cards{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;
+  margin-bottom:15px;
+}
+
+.card{
+  background:#111827;
+  border:1px solid #263244;
+  border-radius:10px;
+  padding:14px;
+}
+
+.card-title{
+  color:#94a3b8;
+  font-size:12px;
+}
+
+.card-value{
+  margin-top:5px;
+  font-size:23px;
+  font-weight:bold;
+}
+
+.table-wrap{
+  overflow-x:auto;
+  background:#111827;
+  border:1px solid #263244;
+  border-radius:10px;
 }
 
 table{
-    width:100%;
-    min-width:1050px;
-    border-collapse:collapse
+  width:100%;
+  border-collapse:collapse;
+  min-width:1050px;
 }
 
 th{
-    background:#172033;
-    color:#94a3b8;
-    padding:13px 10px;
-    text-align:left;
-    font-size:12px
+  text-align:left;
+  padding:12px 8px;
+  background:#172033;
+  color:#94a3b8;
+  font-size:12px;
+  position:sticky;
+  top:0;
 }
 
 td{
-    padding:12px 10px;
-    border-top:1px solid #202b3d;
-    font-size:13px
+  padding:11px 8px;
+  border-top:1px solid #202b3d;
+  font-size:13px;
 }
 
 tr:hover{
-    background:#172033;
-    cursor:pointer
+  background:#172033;
+  cursor:pointer;
 }
 
 .code{
-    font-weight:bold;
-    font-size:15px
-}
-
-.name{
-    color:#64748b;
-    font-size:11px;
-    margin-top:3px
+  font-weight:bold;
+  color:#60a5fa;
 }
 
 .score{
-    display:inline-block;
-    min-width:42px;
-    text-align:center;
-    padding:5px 8px;
-    border-radius:7px;
-    font-weight:bold
+  font-size:17px;
+  font-weight:bold;
 }
-
-.vgood{background:#064e3b;color:#6ee7b7}
-.good{background:#14532d;color:#86efac}
-.pos{background:#365314;color:#bef264}
-.neutral{background:#374151;color:#d1d5db}
-.weak{background:#78350f;color:#fdba74}
-.bad{background:#7f1d1d;color:#fca5a5}
 
 .signal{
-    padding:5px 8px;
-    border-radius:7px;
-    font-size:11px;
-    font-weight:bold
+  display:inline-block;
+  padding:5px 8px;
+  border-radius:6px;
+  font-size:11px;
+  font-weight:bold;
 }
 
-#status{
-    color:#94a3b8;
-    margin:12px 0
+.strong{
+  background:#14532d;
+  color:#86efac;
+}
+
+.positive{
+  background:#064e3b;
+  color:#6ee7b7;
+}
+
+.neutral{
+  background:#713f12;
+  color:#fde68a;
+}
+
+.weak{
+  background:#7f1d1d;
+  color:#fca5a5;
+}
+
+.sell{
+  background:#450a0a;
+  color:#fecaca;
+}
+
+.muted{
+  color:#94a3b8;
 }
 
 .modal{
-    display:none;
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,.75);
-    z-index:99;
-    padding:20px;
-    align-items:center;
-    justify-content:center
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.75);
+  z-index:50;
+  padding:20px;
 }
 
-.modalbox{
-    width:min(650px,100%);
-    max-height:90vh;
-    overflow:auto;
-    background:#111827;
-    border:1px solid #334155;
-    border-radius:18px;
-    padding:25px;
-    position:relative
+.modal-box{
+  max-width:700px;
+  margin:40px auto;
+  background:#111827;
+  border:1px solid #334155;
+  border-radius:14px;
+  padding:20px;
+  max-height:85vh;
+  overflow:auto;
 }
 
-.close{
-    position:absolute;
-    right:15px;
-    top:10px;
-    background:none;
-    border:0;
-    color:#aaa;
-    font-size:30px
+.modal-close{
+  float:right;
+  border:0;
+  background:#334155;
+  color:white;
+  border-radius:7px;
+  padding:7px 11px;
+}
+
+.detail-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:10px;
+  margin-top:15px;
 }
 
 .detail{
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:10px;
-    margin-top:20px
-}
-
-.detail div{
-    background:#172033;
-    padding:12px;
-    border-radius:10px
+  background:#0f172a;
+  padding:12px;
+  border-radius:8px;
 }
 
 .detail small{
-    display:block;
-    color:#94a3b8;
-    margin-bottom:5px
+  color:#94a3b8;
+  display:block;
+  margin-bottom:4px;
 }
 
-@media(max-width:700px){
-    .cards{grid-template-columns:repeat(2,1fr)}
-    .controls{grid-template-columns:1fr}
-    .detail{grid-template-columns:repeat(2,1fr)}
-    h1{font-size:23px}
+.loading{
+  text-align:center;
+  padding:40px;
+  color:#94a3b8;
+}
+
+.error{
+  background:#450a0a;
+  color:#fecaca;
+  padding:15px;
+  border-radius:10px;
+}
+
+@media(max-width:800px){
+  .controls{
+    grid-template-columns:1fr;
+  }
+
+  .cards{
+    grid-template-columns:repeat(2,1fr);
+  }
 }
 </style>
 </head>
@@ -216,118 +248,734 @@ tr:hover{
 <body>
 
 <header>
-<div class="header">
-<h1>📡 BIST Radar</h1>
-<div class="sub">
-BIST hisseleri • Teknik analiz • Momentum • Para akışı • Risk
-</div>
-</div>
+  <h1>📡 BIST Radar</h1>
+  <div class="subtitle">
+    Günlük hisse tarama ve skor sistemi
+  </div>
 </header>
 
 <div class="container">
 
-<div class="cards">
+  <div id="status" class="status">
+    Veriler yükleniyor...
+  </div>
 
-<div class="card">
-<small>Toplam Hisse</small>
-<strong id="total">-</strong>
-</div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-title">Toplam Hisse</div>
+      <div id="totalStocks" class="card-value">-</div>
+    </div>
 
-<div class="card">
-<small>Güçlü Hisse</small>
-<strong id="strong">-</strong>
-</div>
+    <div class="card">
+      <div class="card-title">Güçlü Sinyal</div>
+      <div id="strongStocks" class="card-value">-</div>
+    </div>
 
-<div class="card">
-<small>Pozitif Hisse</small>
-<strong id="positive">-</strong>
-</div>
+    <div class="card">
+      <div class="card-title">Pozitif</div>
+      <div id="positiveStocks" class="card-value">-</div>
+    </div>
 
-<div class="card">
-<small>Ortalama Skor</small>
-<strong id="average">-</strong>
-</div>
+    <div class="card">
+      <div class="card-title">Ortalama Skor</div>
+      <div id="averageScore" class="card-value">-</div>
+    </div>
+  </div>
 
-</div>
+  <div class="controls">
 
-<div class="controls">
+    <input
+      id="search"
+      type="search"
+      placeholder="Hisse ara: ASELS, THYAO..."
+    >
 
-<input
-id="search"
-placeholder="🔎 Hisse veya şirket ara..."
->
+    <select id="signalFilter">
+      <option value="">Tüm sinyaller</option>
+      <option value="strong">Güçlü</option>
+      <option value="positive">Pozitif</option>
+      <option value="neutral">Nötr</option>
+      <option value="weak">Zayıf</option>
+      <option value="sell">Sat</option>
+    </select>
 
-<select id="filter">
-<option value="all">Tüm hisseler</option>
-<option value="very">Çok Güçlü</option>
-<option value="strong">Güçlü</option>
-<option value="positive">Pozitif</option>
-<option value="neutral">Nötr</option>
-<option value="weak">Zayıf</option>
-</select>
+    <select id="sortSelect">
+      <option value="score">Skora göre</option>
+      <option value="technical">Teknik</option>
+      <option value="momentum">Momentum</option>
+      <option value="flow">Para Akışı</option>
+      <option value="risk">Risk</option>
+      <option value="ret21">21 Gün</option>
+      <option value="rsi">RSI</option>
+    </select>
 
-<select id="sort">
-<option value="score">Genel Skor</option>
-<option value="technical">Teknik</option>
-<option value="flow">Para Akışı</option>
-<option value="riskScore">Risk</option>
-<option value="ret21">21 Gün Getiri</option>
-<option value="volumeRatio">Hacim</option>
-<option value="rsi">RSI</option>
-</select>
+  </div>
 
-</div>
+  <div class="table-wrap">
 
-<div id="status">Veriler yükleniyor...</div>
+    <table>
 
-<div class="tablebox">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Hisse</th>
+          <th>Fiyat</th>
+          <th>Skor</th>
+          <th>Sinyal</th>
+          <th>Teknik</th>
+          <th>Momentum</th>
+          <th>Para Akışı</th>
+          <th>Risk</th>
+          <th>RSI</th>
+          <th>21 Gün</th>
+        </tr>
+      </thead>
 
-<table>
+      <tbody id="stockTableBody">
+        <tr>
+          <td colspan="11" class="loading">
+            Veriler yükleniyor...
+          </td>
+        </tr>
+      </tbody>
 
-<thead>
-<tr>
-<th>#</th>
-<th>HİSSE</th>
-<th>FİYAT</th>
-<th>SKOR</th>
-<th>TEKNİK</th>
-<th>AKIŞ</th>
-<th>RİSK</th>
-<th>21G</th>
-<th>HACİM</th>
-<th>SİNYAL</th>
-</tr>
-</thead>
+    </table>
 
-<tbody id="table">
-</tbody>
-
-</table>
-
-</div>
-
-</div>
-
-<div id="modal" class="modal">
-
-<div class="modalbox">
-
-<button class="close" onclick="closeModal()">×</button>
-
-<h2 id="modalCode"></h2>
-<div id="modalName" class="sub"></div>
-
-<div id="modalScore"></div>
-
-<div id="modalSignal"></div>
-
-<div id="details" class="detail"></div>
+  </div>
 
 </div>
 
+<div id="stockModal" class="modal">
+
+  <div class="modal-box">
+
+    <button class="modal-close" onclick="closeModal()">
+      Kapat
+    </button>
+
+    <h2 id="modalTitle">Hisse</h2>
+
+    <div id="modalContent"></div>
+
+  </div>
+
 </div>
 
-<script src="app.js"></script>
+<script>
+
+const DATA_URL = "./data.json";
+
+let stocks = [];
+let filteredStocks = [];
+
+
+/* --------------------------------------------------
+   GÜVENLİ SAYI
+-------------------------------------------------- */
+
+function num(value, fallback=0){
+
+  const n = Number(value);
+
+  return Number.isFinite(n) ? n : fallback;
+
+}
+
+
+/* --------------------------------------------------
+   YÜZDE FORMAT
+-------------------------------------------------- */
+
+function percent(value){
+
+  const n = num(value);
+
+  return (n >= 0 ? "+" : "") + n.toFixed(2) + "%";
+
+}
+
+
+/* --------------------------------------------------
+   SKOR MOTORU V2
+-------------------------------------------------- */
+
+function calculateStock(stock){
+
+  const technical =
+    num(stock.technical,50);
+
+  const flow =
+    num(stock.flow,50);
+
+  const risk =
+    num(stock.riskScore,50);
+
+  const fundamental =
+    num(stock.fundamental,50);
+
+  const valuation =
+    num(stock.valuation,50);
+
+  const rsi =
+    num(stock.rsi,50);
+
+  const ret21 =
+    num(stock.ret21,0);
+
+  /*
+    Momentum:
+
+    21 günlük performans + RSI
+    üzerinden normalize edilir.
+  */
+
+  let momentum = 50;
+
+  if(ret21 > 15) momentum += 25;
+  else if(ret21 > 8) momentum += 18;
+  else if(ret21 > 3) momentum += 10;
+  else if(ret21 > 0) momentum += 5;
+  else if(ret21 < -15) momentum -= 25;
+  else if(ret21 < -8) momentum -= 18;
+  else if(ret21 < -3) momentum -= 10;
+  else if(ret21 < 0) momentum -= 5;
+
+
+  if(rsi >= 50 && rsi <= 70)
+    momentum += 10;
+
+  else if(rsi > 75)
+    momentum -= 8;
+
+  else if(rsi < 35)
+    momentum -= 8;
+
+
+  momentum =
+    Math.max(0,Math.min(100,momentum));
+
+
+  /*
+    Yeni toplam skor
+
+    Teknik       %30
+    Momentum     %20
+    Para akışı   %15
+    Temel        %10
+    Değerleme    %10
+    Risk         %15
+  */
+
+  const score = Math.round(
+
+    technical * .30 +
+    momentum * .20 +
+    flow * .15 +
+    fundamental * .10 +
+    valuation * .10 +
+    risk * .15
+
+  );
+
+
+  let signal;
+
+  if(score >= 75)
+    signal = "strong";
+
+  else if(score >= 65)
+    signal = "positive";
+
+  else if(score >= 55)
+    signal = "neutral";
+
+  else if(score >= 45)
+    signal = "weak";
+
+  else
+    signal = "sell";
+
+
+  return {
+
+    ...stock,
+
+    technical,
+    momentum,
+    flow,
+    risk,
+    fundamental,
+    valuation,
+    rsi,
+    ret21,
+    score,
+    signal
+
+  };
+
+}
+
+
+/* --------------------------------------------------
+   SİNYAL ADI
+-------------------------------------------------- */
+
+function signalName(signal){
+
+  const names = {
+
+    strong:"GÜÇLÜ",
+
+    positive:"POZİTİF",
+
+    neutral:"NÖTR",
+
+    weak:"ZAYIF",
+
+    sell:"SAT"
+
+  };
+
+  return names[signal] || "NÖTR";
+
+}
+
+
+/* --------------------------------------------------
+   TABLO
+-------------------------------------------------- */
+
+function render(){
+
+  const search =
+    document.getElementById("search")
+      .value
+      .toLowerCase()
+      .trim();
+
+  const signal =
+    document.getElementById("signalFilter").value;
+
+  const sort =
+    document.getElementById("sortSelect").value;
+
+
+  filteredStocks = stocks.filter(stock => {
+
+    const matchesSearch =
+
+      !search ||
+
+      String(stock.code || "")
+        .toLowerCase()
+        .includes(search) ||
+
+      String(stock.name || "")
+        .toLowerCase()
+        .includes(search);
+
+
+    const matchesSignal =
+
+      !signal ||
+
+      stock.signal === signal;
+
+
+    return matchesSearch && matchesSignal;
+
+  });
+
+
+  filteredStocks.sort((a,b)=>{
+
+    const values = {
+
+      score:b.score-a.score,
+
+      technical:b.technical-a.technical,
+
+      momentum:b.momentum-a.momentum,
+
+      flow:b.flow-a.flow,
+
+      risk:b.risk-a.risk,
+
+      ret21:b.ret21-a.ret21,
+
+      rsi:b.rsi-a.rsi
+
+    };
+
+    return values[sort] ?? 0;
+
+  });
+
+
+  const body =
+    document.getElementById("stockTableBody");
+
+
+  if(!filteredStocks.length){
+
+    body.innerHTML = `
+
+      <tr>
+
+        <td colspan="11" class="loading">
+
+          Hisse bulunamadı.
+
+        </td>
+
+      </tr>
+
+    `;
+
+    return;
+
+  }
+
+
+  body.innerHTML = filteredStocks
+    .map((stock,index)=>`
+
+      <tr onclick="showStockDetails(${index})">
+
+        <td>${index+1}</td>
+
+        <td>
+
+          <span class="code">
+
+            ${escapeHTML(stock.code)}
+
+          </span>
+
+          <br>
+
+          <span class="muted">
+
+            ${escapeHTML(stock.name || "")}
+
+          </span>
+
+        </td>
+
+        <td>
+
+          ${num(stock.price).toFixed(2)}
+
+        </td>
+
+        <td>
+
+          <span class="score">
+
+            ${stock.score}
+
+          </span>
+
+        </td>
+
+        <td>
+
+          <span class="signal ${stock.signal}">
+
+            ${signalName(stock.signal)}
+
+          </span>
+
+        </td>
+
+        <td>${Math.round(stock.technical)}</td>
+
+        <td>${Math.round(stock.momentum)}</td>
+
+        <td>${Math.round(stock.flow)}</td>
+
+        <td>${Math.round(stock.risk)}</td>
+
+        <td>${num(stock.rsi).toFixed(1)}</td>
+
+        <td>${percent(stock.ret21)}</td>
+
+      </tr>
+
+    `)
+    .join("");
+
+}
+
+
+/* --------------------------------------------------
+   İSTATİSTİKLER
+-------------------------------------------------- */
+
+function updateSummary(){
+
+  const total = stocks.length;
+
+  const strong =
+    stocks.filter(x=>x.signal==="strong").length;
+
+  const positive =
+    stocks.filter(x=>x.signal==="positive").length;
+
+  const average =
+    total
+
+      ? stocks.reduce((sum,x)=>sum+x.score,0)/total
+
+      : 0;
+
+
+  document.getElementById("totalStocks")
+    .textContent = total;
+
+  document.getElementById("strongStocks")
+    .textContent = strong;
+
+  document.getElementById("positiveStocks")
+    .textContent = positive;
+
+  document.getElementById("averageScore")
+    .textContent = average.toFixed(1);
+
+
+  document.getElementById("status")
+    .textContent =
+
+      `BIST Radar aktif • ${total} hisse tarandı • ` +
+      `${strong} güçlü sinyal • ` +
+      `${positive} pozitif sinyal`;
+
+}
+
+
+/* --------------------------------------------------
+   VERİYİ YÜKLE
+-------------------------------------------------- */
+
+async function loadData(){
+
+  try{
+
+    const response =
+      await fetch(DATA_URL + "?v=" + Date.now());
+
+
+    if(!response.ok){
+
+      throw new Error(
+        "data.json yüklenemedi. HTTP " +
+        response.status
+      );
+
+    }
+
+
+    const data =
+      await response.json();
+
+
+    if(!Array.isArray(data)){
+
+      throw new Error(
+        "data.json liste formatında değil."
+      );
+
+    }
+
+
+    stocks =
+      data
+        .map(calculateStock)
+        .filter(x=>x.code);
+
+
+    stocks.sort(
+      (a,b)=>b.score-a.score
+    );
+
+
+    updateSummary();
+
+    render();
+
+
+  }catch(error){
+
+    console.error(error);
+
+    document.getElementById("status")
+      .innerHTML = `
+
+        <div class="error">
+
+          <strong>Veri yüklenemedi.</strong><br><br>
+
+          ${escapeHTML(error.message)}
+
+          <br><br>
+
+          Kontrol edilmesi gereken dosya:
+          <strong>data.json</strong>
+
+        </div>
+
+      `;
+
+  }
+
+}
+
+
+/* --------------------------------------------------
+   DETAY
+-------------------------------------------------- */
+
+function showStockDetails(index){
+
+  const stock =
+    filteredStocks[index];
+
+  if(!stock) return;
+
+
+  document.getElementById("modalTitle")
+    .textContent =
+
+      `${stock.code} • ${stock.name || ""}`;
+
+
+  document.getElementById("modalContent")
+    .innerHTML = `
+
+      <span class="signal ${stock.signal}">
+
+        ${signalName(stock.signal)}
+
+      </span>
+
+
+      <div class="detail-grid">
+
+        ${detail("Toplam Skor",stock.score)}
+
+        ${detail("Fiyat",num(stock.price).toFixed(2))}
+
+        ${detail("Teknik",Math.round(stock.technical))}
+
+        ${detail("Momentum",Math.round(stock.momentum))}
+
+        ${detail("Para Akışı",Math.round(stock.flow))}
+
+        ${detail("Risk Skoru",Math.round(stock.risk))}
+
+        ${detail("RSI",num(stock.rsi).toFixed(2))}
+
+        ${detail("21 Gün",percent(stock.ret21))}
+
+        ${detail("Hacim Oranı",num(stock.volumeRatio).toFixed(2))}
+
+        ${detail("Volatilite",num(stock.volatility).toFixed(2))}
+
+        ${detail("Temel",Math.round(stock.fundamental))}
+
+        ${detail("Değerleme",Math.round(stock.valuation))}
+
+      </div>
+
+    `;
+
+
+  document.getElementById("stockModal")
+    .style.display = "block";
+
+}
+
+
+function detail(title,value){
+
+  return `
+
+    <div class="detail">
+
+      <small>${title}</small>
+
+      <strong>${value}</strong>
+
+    </div>
+
+  `;
+
+}
+
+
+function closeModal(){
+
+  document.getElementById("stockModal")
+    .style.display = "none";
+
+}
+
+
+/* --------------------------------------------------
+   GÜVENLİ HTML
+-------------------------------------------------- */
+
+function escapeHTML(value){
+
+  return String(value ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+
+}
+
+
+/* --------------------------------------------------
+   EVENTLER
+-------------------------------------------------- */
+
+document
+  .getElementById("search")
+  .addEventListener("input",render);
+
+
+document
+  .getElementById("signalFilter")
+  .addEventListener("change",render);
+
+
+document
+  .getElementById("sortSelect")
+  .addEventListener("change",render);
+
+
+document
+  .getElementById("stockModal")
+  .addEventListener("click",function(event){
+
+    if(event.target === this){
+
+      closeModal();
+
+    }
+
+  });
+
+
+/* --------------------------------------------------
+   BAŞLAT
+-------------------------------------------------- */
+
+loadData();
+
+</script>
 
 </body>
 </html>
