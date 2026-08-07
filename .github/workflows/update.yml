@@ -1,1 +1,118 @@
+name: BIST Radar Günlük Güncelle
 
+on:
+  schedule:
+    # Hafta içi Türkiye saatiyle yaklaşık 20:00
+    - cron: "0 17 * * 1-5"
+  workflow_dispatch:
+
+# GitHub Actions'ın data.json dosyasını commit edip push edebilmesi için gerekli.
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repoyu indir
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Gereksinimleri kur
+        run: pip install -r requirements.txt
+
+      - name: BIST verilerini güncelle
+        run: python update_data.py
+
+      # update_data.py bazı hisselerde RSI gibi hesaplamalardan
+      # NaN / Infinity üretebilir. Bunlar standart JSON değildir.
+      # Site JSON.parse() kullandığı için NaN -> null yapılır.
+      - name: data.json dosyasını geçerli JSON'a çevir
+        run: |
+          python - <<'PY'
+          import json
+          import math
+          from pathlib import Path
+
+          path = Path("data.json")
+
+          if not path.exists():
+              raise SystemExit("HATA: data.json oluşturulmadı.")
+
+          # Python NaN/Infinity değerlerini okuyabilir.
+          with path.open("r", encoding="utf-8") as f:
+              data = json.load(f, parse_constant=lambda x: None)
+
+          def clean(value):
+              if isinstance(value, float):
+                  return value if math.isfinite(value) else None
+              if isinstance(value, list):
+                  return [clean(v) for v in value]
+              if isinstance(value, dict):
+                  return {k: clean(v) for k, v in value.items()}
+              return value
+
+          data = clean(data)
+
+          tmp = path.with_suffix(".tmp")
+          with tmp.open("w", encoding="utf-8") as f:
+              json.dump(
+                  data,
+                  f,
+                  ensure_ascii=False,
+                  allow_nan=False,
+                  separators=(",", ":")
+              )
+              f.write("\n")
+
+          tmp.replace(path)
+
+          if not isinstance(data, list):
+              raise SystemExit("HATA: data.json kök yapısı liste değil.")
+
+          print(f"Geçerli JSON oluşturuldu. Hisse sayısı: {len(data)}")
+
+          if len(data) < 450:
+              raise SystemExit(
+                  f"HATA: Beklenenden az hisse var: {len(data)}. "
+                  "Veri güncellemesi başarısız olabilir."
+              )
+          PY
+
+      # JSON'un gerçekten tarayıcı tarafından okunabilecek durumda
+      # olduğunu son kez kontrol et.
+      - name: JSON son kontrol
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          with Path("data.json").open("r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          print("JSON OK")
+          print("Toplam hisse:", len(data))
+          print("İlk 10:", [x.get("code") for x in data[:10]])
+          PY
+
+      - name: Değişiklikleri commit et ve GitHub'a gönder
+        run: |
+          git config user.name "BIST Radar Bot"
+          git config user.email "actions@users.noreply.github.com"
+
+          git add data.json
+
+          if git diff --cached --quiet; then
+            echo "Yeni veri değişikliği yok."
+          else
+            git commit -m "Günlük BIST verisi"
+            git push
+          fi
