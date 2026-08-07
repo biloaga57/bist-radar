@@ -21,11 +21,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ana
 
       - name: Python kur
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Gereksinimleri kur
         run: |
@@ -55,10 +56,13 @@ jobs:
           def temizle(v):
               if isinstance(v, float):
                   return v if math.isfinite(v) else None
+
               if isinstance(v, list):
                   return [temizle(x) for x in v]
+
               if isinstance(v, dict):
                   return {k: temizle(x) for k, x in v.items()}
+
               return v
 
           data = temizle(data)
@@ -106,7 +110,7 @@ jobs:
           print(f"JSON geçerli. Toplam hisse: {len(data)}")
           PY
 
-            - name: Değişiklikleri GitHub'a gönder
+      - name: Değişiklikleri GitHub'a gönder
         run: |
           git config user.name "BIST Radar Bot"
           git config user.email "bist-radar-bot@users.noreply.github.com"
@@ -120,12 +124,8 @@ jobs:
 
           git commit -m "BIST verilerini güncelle"
 
-          # Ana daldaki son değişiklikleri al
           git fetch origin ana
 
-          # Uzak daldaki yeni commitleri kendi commitimizin altına al
           git rebase origin/ana
 
-          # Güncel ana dala gönder
           git push origin HEAD:ana
-    
