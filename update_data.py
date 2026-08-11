@@ -823,7 +823,15 @@ def momentum_score(
 
     return clamp(score)
 
+# -----------------------------------------------------
+# MaT-R
+# -----------------------------------------------------
 
+matr = matr_strategy(
+    close,
+    high,
+    low
+)
 # =========================================================
 # PARA AKIŞI / HACİM
 # =========================================================
@@ -893,7 +901,93 @@ def flow_score(
         volume_ratio
     )
 
+# =========================================================
+# MaT-R STRATEJİSİ
+# =========================================================
 
+def matr_strategy(close, high, low):
+    close = pd.to_numeric(close, errors="coerce")
+    high = pd.to_numeric(high, errors="coerce")
+    low = pd.to_numeric(low, errors="coerce")
+
+    # EMA 34 / SMA 34
+    ema34 = close.ewm(span=34, adjust=False).mean()
+    sma34 = close.rolling(34).mean()
+
+    # MaT-R MACD: EMA 3 - EMA 5
+    fast = close.ewm(span=3, adjust=False).mean()
+    slow = close.ewm(span=5, adjust=False).mean()
+
+    macd = fast - slow
+
+    # Sinyal SMA 2
+    signal = macd.rolling(2).mean()
+
+    # ATR 17 - Wilder/RMA
+    tr1 = high - low
+    tr2 = (high - close.shift(1)).abs()
+    tr3 = (low - close.shift(1)).abs()
+
+    tr = pd.concat(
+        [tr1, tr2, tr3],
+        axis=1
+    ).max(axis=1)
+
+    atr17 = tr.ewm(
+        alpha=1 / 17,
+        adjust=False
+    ).mean()
+
+    # Önceki bar
+    prev_macd = macd.shift(1)
+    prev_signal = signal.shift(1)
+
+    # Pine:
+    # ta.crossover(macd, signal) and oncu2 < oncu1
+    cross_up = (
+        (macd > signal) &
+        (prev_macd <= prev_signal) &
+        (sma34 < ema34)
+    )
+
+    price = safe_float(close.iloc[-1])
+    atr_value = safe_float(atr17.iloc[-1])
+
+    ema34_value = safe_float(ema34.iloc[-1])
+    sma34_value = safe_float(sma34.iloc[-1])
+    macd_value = safe_float(macd.iloc[-1])
+    signal_value = safe_float(signal.iloc[-1])
+
+    # Bugünkü AL sinyali
+    is_buy = bool(cross_up.iloc[-1])
+
+    if is_buy:
+        entry = price
+        stop = entry - (2.2 * atr_value)
+        tp1 = entry * 1.12
+        tp2 = entry * 1.20
+
+        matr_signal = "AL"
+    else:
+        entry = 0
+        stop = 0
+        tp1 = 0
+        tp2 = 0
+        matr_signal = "BEKLE"
+
+    return {
+        "matrSignal": matr_signal,
+        "matrEntry": round(entry, 2),
+        "matrTP1": round(tp1, 2),
+        "matrTP2": round(tp2, 2),
+        "matrSL": round(stop, 2),
+        "matrATR": round(atr_value, 2),
+        "matrEMA34": round(ema34_value, 2),
+        "matrSMA34": round(sma34_value, 2),
+        "matrMACD": round(macd_value, 4),
+        "matrSignalLine": round(signal_value, 4),
+        "matrTrend": "YUKARI" if ema34_value > sma34_value else "AŞAĞI"
+    }
 # =========================================================
 # RİSK
 # =========================================================
@@ -1682,7 +1776,17 @@ def main():
         key=lambda x: x["score"],
         reverse=True
     )
-
+        "matrSignal": matr["matrSignal"],
+        "matrEntry": matr["matrEntry"],
+        "matrTP1": matr["matrTP1"],
+        "matrTP2": matr["matrTP2"],
+        "matrSL": matr["matrSL"],
+        "matrATR": matr["matrATR"],
+        "matrEMA34": matr["matrEMA34"],
+        "matrSMA34": matr["matrSMA34"],
+        "matrMACD": matr["matrMACD"],
+        "matrSignalLine": matr["matrSignalLine"],
+        "matrTrend": matr["matrTrend"],
     # -----------------------------------------------------
     # MaT-R AL SAYISI
     # -----------------------------------------------------
